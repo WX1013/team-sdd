@@ -1,0 +1,15 @@
+version: 1
+execution:
+  strategy: auto
+checks:
+  test:
+    - npm
+    - test
+  typecheck:
+    - npm
+    - run
+    - typecheck
+  build:
+    - npm
+    - run
+    - build

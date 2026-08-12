@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team SDD Technical Design"
+  short_description: "Create an implementation-ready design"
+  default_prompt: "Use $technical-design to produce a concrete, governed Technical Design for this Team SDD Delivery."

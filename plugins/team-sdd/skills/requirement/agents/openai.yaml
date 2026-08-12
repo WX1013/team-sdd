@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team SDD Requirement"
+  short_description: "Clarify and baseline requirements"
+  default_prompt: "Use $requirement to turn this Team SDD Delivery into a clarified, submit-ready Requirement Baseline."

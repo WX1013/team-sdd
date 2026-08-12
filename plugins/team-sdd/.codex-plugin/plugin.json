@@ -1,0 +1,19 @@
+{
+  "name": "team-sdd",
+  "version": "0.1.0",
+  "description": "Operate Team SDD deliveries through Core Gates in Codex.",
+  "author": {
+    "name": "Team SDD"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Team SDD",
+    "shortDescription": "Run Team SDD through governed Core Gates.",
+    "longDescription": "Use Team SDD's MCP server and workflow Skill to create, inspect, and submit governed Delivery artifacts.",
+    "developerName": "Team SDD",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Use Team SDD to guide this Delivery through its next governed workflow step."
+  },
+  "mcpServers": "./.mcp.json"
+}

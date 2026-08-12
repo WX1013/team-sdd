@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team SDD Spec Split"
+  short_description: "Split work into deliverable Spec Packs"
+  default_prompt: "Use $spec-split to split this Team SDD Delivery into independently deliverable, governed Spec Packs."

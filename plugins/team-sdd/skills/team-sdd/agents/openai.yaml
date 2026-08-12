@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team SDD Workflow"
+  short_description: "Operate Team SDD through Core Gates"
+  default_prompt: "Use $team-sdd to operate this workspace through its Team SDD workflow."
