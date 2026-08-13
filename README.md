@@ -11,7 +11,6 @@
 首次使用时，在个人 `~/.npmrc` 或 CI Secret 中配置 Nexus；不要把 Token 或 `.npmrc` 提交到项目：
 
 ```ini
-registry=https://nexus.zyzbp.cn/repository/npm-group/
 @zbp:registry=https://nexus.zyzbp.cn/repository/npm-hosted/
 ```
 
@@ -188,4 +187,4 @@ npx sdd repair DLV-001 --apply
 
 通常只需运行初始化命令。下面路径用于确认是否已写入项目：Claude Code 位于 `.claude/commands/sdd/`，CodeBuddy 位于 `.codebuddy/commands/sdd/`，Codex 位于 `.agents/plugins/team-sdd/`。所有适配均使用 `node_modules/@zbp/sdd/dist/mcp-server.js`。
 
-源码仓库直接调试原生集成时，可参考 `plugins/team-sdd`、`integrations/claude-code` 和 `integrations/codebuddy`；维护步骤见 [MAINTAINERS.md](./MAINTAINERS.md)。CodeBuddy **绝不能替换已有目标 `.mcp.json`**：`.mcp.json` 不存在时才复制；`.mcp.json` 已存在时保留所有 `mcpServers`，只合并 `team-sdd` 条目。
+源码仓库的适配维护与本地调试步骤见 [MAINTAINERS.md](./MAINTAINERS.md)。用户项目始终通过 `npx @zbp/sdd init --agents … --install` 安装适配。CodeBuddy **绝不能替换已有目标 `.mcp.json`**：安装器会保留所有现有 `mcpServers`，只合并 `team-sdd` 条目。

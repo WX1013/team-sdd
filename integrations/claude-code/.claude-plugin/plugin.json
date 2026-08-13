@@ -1,8 +1,0 @@
-{
-  "name": "team-sdd",
-  "version": "0.1.0",
-  "description": "Operate Team SDD deliveries through the repository-local Core MCP server.",
-  "commands": "./commands/",
-  "skills": "./skills/",
-  "mcpServers": "./.mcp.json"
-}

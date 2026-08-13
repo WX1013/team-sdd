@@ -1,11 +1,11 @@
 {
   "name": "@zbp/sdd",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "UNLICENSED",
   "type": "module",
   "bin": {
-    "sdd": "./dist/cli.js"
+    "sdd": "dist/cli.js"
   },
   "engines": {
     "node": ">=20"

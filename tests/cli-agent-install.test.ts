@@ -56,6 +56,19 @@ describe('Agent installation CLI', () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ root }));
   });
 
+  it('installs the current published package version by default', async () => {
+    const root = await createRoot();
+    const install = vi.fn(async () => undefined);
+
+    const result = await runCli(['init', '--agents', 'claude', '--install'], root, {
+      projectAgentInstaller: { sync: vi.fn(async () => ({ installed: [], unchanged: [], warnings: [] })), inspect: vi.fn(async () => []) },
+      installCurrentPackage: install,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(install).toHaveBeenCalledWith(expect.objectContaining({ root, packageName: '@zbp/sdd', version: '0.1.1' }));
+  });
+
   it('rejects invalid selection and Codex registration without Codex', async () => {
     const root = await createRoot();
     const { dependencies } = createDependencies();

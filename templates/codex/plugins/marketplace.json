@@ -5,7 +5,7 @@
       "name": "team-sdd",
       "source": "./plugins/team-sdd",
       "description": "Project-local Team SDD workflow commands.",
-      "version": "0.1.0"
+      "version": "0.1.1"
     }
   ]
 }

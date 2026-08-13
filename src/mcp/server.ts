@@ -18,7 +18,7 @@ function jsonResult(value: unknown) {
 }
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: 'team-sdd', version: '0.1.0' });
+  const server = new McpServer({ name: 'team-sdd', version: '0.1.1' });
   const tools = createToolHandlers();
 
   server.registerTool('sdd_new', {

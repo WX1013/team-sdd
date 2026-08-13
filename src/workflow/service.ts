@@ -1,4 +1,3 @@
-import { constants } from 'node:fs';
 import { access, lstat, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ArtifactStore, type ArtifactKind } from '../artifacts/artifact-store.js';
@@ -555,36 +554,6 @@ function errorMessage(error: unknown): string {
         hookInspection = await inspectGitHook(root);
       }
       findings.push(...hookInspection.findings);
-
-      try {
-        const integrations = await lstat(join(root, 'integrations'));
-        if (integrations.isDirectory() && !integrations.isSymbolicLink()) {
-          for (const integrationPath of [join('integrations', 'claude-code'), join('integrations', 'codebuddy')]) {
-            try {
-              const metadata = await lstat(join(root, integrationPath));
-              if (!metadata.isDirectory()) {
-                findings.push(diagnosticFinding(
-                  'INTEGRATION_SOURCE_INVALID',
-                  `Native Agent integration source must be a directory: ${integrationPath}`,
-                  integrationPath,
-                  'Replace the entry with the repository-owned integration source directory.',
-                ));
-                continue;
-              }
-              await access(join(root, integrationPath), constants.R_OK);
-            } catch (error) {
-              findings.push(diagnosticFinding(
-                'INTEGRATION_SOURCE_UNREADABLE',
-                `Unable to read the native Agent integration source at ${integrationPath}: ${errorMessage(error)}`,
-                integrationPath,
-                'Restore the repository-owned integration source directory.',
-              ));
-            }
-          }
-        }
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
 
       return { ok: findings.length === 0, findings, fixes };
     },

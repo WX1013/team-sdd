@@ -24,7 +24,9 @@ NPM_CONFIG_CACHE=/private/tmp/zbp-sdd-npm-cache npm run pack:check
 
 - Core 是唯一的状态、审批、事件和 Gate 权威；Agent 只能通过 MCP/CLI 的审批或提交接口推进状态。
 - `src/runtime/` 负责 Logical Skill、Provider、能力和执行策略解析；不得在 Workflow 中按 Claude、Codex 或 CodeBuddy 分支。
-- `templates/` 是会随 npm 包安装到用户项目的适配源；`integrations/` 与 `plugins/` 是源码仓库中的原生集成参考产物。
+- `templates/` 是唯一的项目级 Agent 安装权威源，也是 npm 包发布的适配内容。
+- `integrations/` 只保留源码调试说明，不得添加命令、Skill、插件 manifest 或 MCP 配置副本。
+- `plugins/team-sdd/` 只保留 Codex Logical Skills；不得作为 npm 项目安装模板使用。
 - 改动行为时遵循 TDD：先新增失败测试，再做最小实现，最后运行聚焦与全量验证。
 - 修改 Agent 安装逻辑时，必须保留用户已有的非 `team-sdd` `.mcp.json` 条目，并拒绝覆盖已自定义的受管文件。
 
@@ -69,9 +71,11 @@ npx @zbp/sdd --help
 
 ## 原生 Agent 集成维护
 
-- Claude Code 源适配：[`integrations/claude-code`](./integrations/claude-code)
-- CodeBuddy 源适配：[`integrations/codebuddy`](./integrations/codebuddy)
-- Codex 源插件：[`plugins/team-sdd`](./plugins/team-sdd)
+- Claude Code 项目模板：[`templates/claude/`](./templates/claude/)
+- CodeBuddy 项目模板：[`templates/codebuddy/`](./templates/codebuddy/)
+- Codex 项目快捷命令模板：[`templates/codex/`](./templates/codex/)
+- Codex Logical Skills：[`plugins/team-sdd/`](./plugins/team-sdd/)
+- 源码调试流程：[`integrations/README.md`](./integrations/README.md)
 
 CodeBuddy 使用项目根目录 `.mcp.json`。安装或文档更新时，必须说明：不存在时才复制配置；存在时保留全部 `mcpServers`，只手工合并 `team-sdd`。不得提供覆盖式复制命令。
 

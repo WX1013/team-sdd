@@ -175,36 +175,15 @@ exit 2
     });
   });
 
-  it('reports integration source entries that are not directories', async () => {
+  it('does not treat the documentation-only integrations directory as a required runtime adapter', async () => {
     const root = await createRoot();
     await mkdir(join(root, 'integrations'), { recursive: true });
-    await writeFile(join(root, 'integrations/claude-code'), 'not a directory');
-    await mkdir(join(root, 'integrations/codebuddy'));
+    await writeFile(join(root, 'integrations/README.md'), '# Development notes\n');
 
-    await expect(createSddService({ root }).doctor()).resolves.toMatchObject({
-      findings: expect.arrayContaining([expect.objectContaining({
-        code: 'INTEGRATION_SOURCE_INVALID',
-        artifact: 'integrations/claude-code',
-      })]),
-    });
-  });
+    const result = await createSddService({ root }).doctor();
 
-  it('reports an integration source directory that is not readable', async () => {
-    const root = await createRoot();
-    const unreadable = join(root, 'integrations/claude-code');
-    await mkdir(unreadable, { recursive: true });
-    await mkdir(join(root, 'integrations/codebuddy'));
-    await chmod(unreadable, 0o000);
-    try {
-      await expect(createSddService({ root }).doctor()).resolves.toMatchObject({
-        findings: expect.arrayContaining([expect.objectContaining({
-          code: 'INTEGRATION_SOURCE_UNREADABLE',
-          artifact: 'integrations/claude-code',
-        })]),
-      });
-    } finally {
-      await chmod(unreadable, 0o755);
-    }
+    expect(result.findings.map(({ code }) => code)).not.toContain('INTEGRATION_SOURCE_INVALID');
+    expect(result.findings.map(({ code }) => code)).not.toContain('INTEGRATION_SOURCE_UNREADABLE');
   });
 
   it('rejects an unsupported execution strategy without changing configuration', async () => {

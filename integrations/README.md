@@ -1,55 +1,13 @@
-# Team SDD Agent integrations
+# Agent 适配开发入口
 
-This directory contains repository-owned prompt adapters for the Team SDD MCP server. They do not reimplement Delivery state, Gate rules, metadata writes, or event logging: every governed decision remains with the standard MCP server.
+项目级 Claude Code、CodeBuddy、Codex 适配的唯一权威源是 [`../templates/`](../templates/)。本目录不保存命令、Skill、MCP 配置或插件 manifest 的副本。
 
-## Build prerequisite
+## 本地验证
 
-Build this package before loading either adapter so that the canonical repository-local MCP command is available:
+1. 在本仓库运行 `npm run build`。
+2. 在临时或目标 Node 项目中运行 `node <本仓库绝对路径>/dist/cli.js init --agents claude,codebuddy,codex`。
+3. 在生成的 `.claude/`、`.codebuddy/`、`.agents/` 与 `.mcp.json` 中加载或检查对应 Agent。
 
-```bash
-npm run build
-node dist/mcp-server.js
-```
+项目安装器从 `templates/` 写入适配文件，并安全合并根目录 `.mcp.json` 的 `mcpServers.team-sdd`。绝不能手动覆盖已有 `.mcp.json` 或其中的其他 MCP Server。
 
-The adapters configure that stdio server as `node` with the repository-relative `dist/mcp-server.js` entry point.
-
-## Claude Code
-
-[`claude-code`](./claude-code) is a Claude Code plugin source package. It uses the plugin convention of a `.claude-plugin/plugin.json` manifest, a package-local `.mcp.json`, `commands/` for slash-command Markdown files, and `skills/<name>/SKILL.md` for the Team SDD Skill.
-
-After building, load it for the current repository session only:
-
-```bash
-claude --plugin-dir ./integrations/claude-code
-```
-
-This does not write any user-global Claude Code configuration.
-
-## CodeBuddy
-
-[`codebuddy`](./codebuddy) is a project-level CodeBuddy adapter. Its source follows CodeBuddy's `.codebuddy/commands/` and `.codebuddy/skills/<name>/SKILL.md` directory conventions. Its source `.mcp.json` is the CodeBuddy project-level MCP configuration that becomes the target repository's root `.mcp.json`.
-
-After building, install the source `.codebuddy` directory in the repository that should use it. Configure its root `.mcp.json` with this no-overwrite protocol:
-
-Never replace or use a bare overwrite copy for an existing target `.mcp.json`.
-
-1. If `.mcp.json` does not exist, copy the source configuration from `integrations/codebuddy/.mcp.json` to the target repository root.
-2. If `.mcp.json` already exists, preserve every existing `mcpServers` entry. Manually merge only the `team-sdd` definition from [`codebuddy/.mcp.json`](./codebuddy/.mcp.json) into that existing `mcpServers` object.
-3. Do not replace the existing `mcpServers` object or any of its entries. Verify that all prior servers and the new `team-sdd` server are present before saving.
-
-The resulting target configuration has existing servers alongside the copied `team-sdd` entry:
-
-```json
-{
-  "mcpServers": {
-    "existing-server": { "command": "existing-command" },
-    "team-sdd": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["dist/mcp-server.js"]
-    }
-  }
-}
-```
-
-This creates only repository-local configuration; it does not install a global CodeBuddy extension.
+Codex 的工作流、需求、技术设计和 Spec 拆分 Logical Skills 的权威源是 [`../plugins/team-sdd/`](../plugins/team-sdd/)；它们不是项目级安装模板。

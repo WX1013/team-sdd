@@ -20,7 +20,7 @@ describe('Nexus publish package', () => {
       name: '@zbp/sdd',
       private: false,
       license: 'UNLICENSED',
-      bin: { sdd: './dist/cli.js' },
+      bin: { sdd: 'dist/cli.js' },
       publishConfig: { registry: 'https://nexus.zyzbp.cn/repository/npm-hosted/' },
     });
     expect(manifest.files).toEqual(['dist', 'templates', 'README.md']);

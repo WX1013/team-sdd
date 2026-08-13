@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command, Option } from 'commander';
 import type { ProjectExecutionStrategy } from './config/project-config.js';
 import { designImpacts, parseDeliveryId, type DeliveryMetadata } from './domain/types.js';
@@ -88,7 +90,7 @@ export async function runCli(args: string[], root = process.cwd(), dependencies:
   const service = createSddService({ root });
   const agentContextService = createAgentContextService(service);
   const projectAgentInstaller = dependencies.projectAgentInstaller ?? createProjectAgentInstaller();
-  const packageManifest = dependencies.packageManifest ?? { name: '@zbp/sdd', version: '0.1.0' };
+  const packageManifest = dependencies.packageManifest ?? { name: '@zbp/sdd', version: '0.1.1' };
   const program = new Command();
   program.name('sdd').exitOverride().configureOutput({
     writeOut: (value) => { stdout += value; },
@@ -478,6 +480,15 @@ async function main(): Promise<void> {
   process.exitCode = result.exitCode;
 }
 
-if (process.argv[1]?.endsWith('/cli.js')) {
+function isCliEntrypoint(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isCliEntrypoint()) {
   void main();
 }
