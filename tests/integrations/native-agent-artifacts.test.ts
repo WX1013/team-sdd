@@ -163,4 +163,26 @@ describe('Team SDD native Agent artifacts', () => {
     expect(readme).toContain('Claude Code');
     expect(readme).toContain('CodeBuddy');
   });
+
+  it('documents separate intervention guides for CodeBuddy, Codex, and Claude Code', async () => {
+    const readme = await readFile('README.md', 'utf8');
+
+    expect(readme).toContain('### CodeBuddy：在桌面会话中介入');
+    expect(readme).toContain('### Codex：通过项目插件介入');
+    expect(readme).toContain('### Claude Code：通过项目命令介入');
+    expect(readme).toContain('npx @zbp/sdd init --agents codebuddy --install');
+    expect(readme).toContain('npx @zbp/sdd init --agents codex --install --register-codex');
+    expect(readme).toContain('npx @zbp/sdd init --agents claude --install');
+  });
+
+  it('keeps maintenance instructions out of the user README', async () => {
+    const [readme, maintainers] = await Promise.all([
+      readFile('README.md', 'utf8'),
+      readFile('MAINTAINERS.md', 'utf8'),
+    ]);
+
+    expect(readme).not.toContain('npm publish --registry=');
+    expect(maintainers).toContain('npm publish --registry=');
+    expect(maintainers).toContain('## 发布到 Nexus');
+  });
 });

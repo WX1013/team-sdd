@@ -29,4 +29,20 @@ describe('Agent Context service', () => {
     expect(context).toMatchObject({ activity: 'REQUIREMENT', logicalSkill: 'requirement-analysis', execution: 'inline' });
     await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ delivery: { state: 'REQUIREMENT' } });
   });
+
+  it('uses the persisted execution strategy when resolving Agent Context', async () => {
+    const service = createSddService({ root: await createRoot() });
+    await service.init();
+    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'APPLICATION_INIT' });
+    await service.setExecutionStrategy({ strategy: 'subagent' });
+
+    const context = await createAgentContextService(service).getContext({
+      deliveryId: 'DLV-001',
+      capabilities: { ...defaultCapabilities, subagents: false },
+    });
+
+    expect(context.skillRuntime.blockers).toEqual([
+      expect.objectContaining({ code: 'EXECUTION_STRATEGY_UNAVAILABLE' }),
+    ]);
+  });
 });

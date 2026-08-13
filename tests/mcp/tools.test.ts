@@ -40,6 +40,26 @@ describe('Team SDD MCP Tool adapters', () => {
     });
   });
 
+  it('returns the same resolved Skill runtime from next without executing an Agent', async () => {
+    const root = await createRoot();
+    const service = createSddService({ root });
+    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'APPLICATION_INIT' });
+
+    await expect(createToolHandlers().sdd_next({ root, deliveryId: 'DLV-001' })).resolves.toMatchObject({
+      ok: true,
+      data: { skillRuntime: { provider: 'team-sdd', skills: ['requirement'], adapter: 'prompt' } },
+    });
+  });
+
+  it('exposes a non-mutating Design assessment separately from a human decision', async () => {
+    const root = await createRoot();
+    await createSddService({ root }).createDelivery({ id: 'DLV-001', title: 'Records API', type: 'FEATURE_CHANGE' });
+
+    await expect(createToolHandlers().sdd_assess_design({
+      root, deliveryId: 'DLV-001', impacts: ['public_api_change'], reason: 'Adds endpoint',
+    })).resolves.toMatchObject({ ok: true, data: { recommendation: 'RECOMMENDED' } });
+  });
+
   it('normalizes invalid roots as structured input errors', async () => {
     await expect(createToolHandlers().sdd_status({ root: 'relative', deliveryId: 'DLV-001' })).resolves.toMatchObject({
       ok: false,

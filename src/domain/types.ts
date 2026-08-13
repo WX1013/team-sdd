@@ -2,6 +2,18 @@ export type DeliveryId = `DLV-${string}`;
 export type SpecId = `SP-${string}`;
 
 export type DeliveryType = 'APPLICATION_INIT' | 'FEATURE_CHANGE';
+export const designImpacts = [
+  'architecture_change', 'database_schema_change', 'public_api_change', 'external_integration_change',
+  'security_change', 'permission_change', 'deployment_change', 'cross_module_change', 'data_migration',
+] as const;
+export type DesignImpact = (typeof designImpacts)[number];
+export type DesignRecommendation = 'RECOMMENDED' | 'NOT_RECOMMENDED';
+export type DesignDecision = {
+  required: boolean;
+  reason: string;
+  recommendation: DesignRecommendation;
+  impacts: readonly DesignImpact[];
+};
 export type DeliveryState =
   | 'REQUIREMENT'
   | 'DESIGN'

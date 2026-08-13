@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { createAgentContextService } from '../workflow/agent-context-service.js';
 import { createSddService } from '../workflow/service.js';
 import { defaultCapabilities } from '../runtime/capabilities.js';
-import { parseDeliveryId, parseSpecId } from '../domain/types.js';
+import { designImpacts, parseDeliveryId, parseSpecId } from '../domain/types.js';
 import { toolError, type ToolResult } from './types.js';
 
 const rootSchema = z.string().refine(isAbsolute, 'root must be an absolute path');
@@ -36,6 +36,12 @@ export const contextInputSchema = statusInputSchema.extend({
     skills: z.boolean().optional(), slashCommands: z.boolean().optional(), subagents: z.boolean().optional(), worktrees: z.boolean().optional(),
     shell: z.boolean().optional(), fileRead: z.boolean().optional(), fileWrite: z.boolean().optional(), mcp: z.boolean().optional(),
   }).optional(),
+}).strict();
+export const assessDesignInputSchema = statusInputSchema.extend({
+  impacts: z.array(z.enum(designImpacts)), reason: z.string().min(1),
+}).strict();
+export const decideDesignInputSchema = statusInputSchema.extend({
+  required: z.boolean(), reason: z.string().min(1), approvedBy: z.string().min(1),
 }).strict();
 
 function parse<T>(schema: z.ZodType<T>, input: unknown): T | ToolResult<never> {
@@ -82,6 +88,14 @@ export function createToolHandlers() {
         const service = createSddService({ root: parsed.root });
         return { ok: true, data: await createAgentContextService(service).getContext({ deliveryId: parsed.deliveryId, capabilities: { ...defaultCapabilities, ...parsed.capabilities } }) };
       } catch (error) { return toolError(error); }
+    },
+    async sdd_assess_design(input: unknown): Promise<ToolResult<unknown>> {
+      const parsed = parse(assessDesignInputSchema, input); if ('ok' in parsed) return parsed;
+      try { const { root, ...request } = parsed; return { ok: true, data: await createSddService({ root }).assessDesign(request) }; } catch (error) { return toolError(error); }
+    },
+    async sdd_decide_design(input: unknown): Promise<ToolResult<unknown>> {
+      const parsed = parse(decideDesignInputSchema, input); if ('ok' in parsed) return parsed;
+      try { const { root, ...request } = parsed; return { ok: true, data: await createSddService({ root }).decideDesign(request) }; } catch (error) { return toolError(error); }
     },
   };
 }

@@ -1,7 +1,8 @@
 {
-  "name": "@team-sdd/core",
-  "private": true,
+  "name": "@zbp/sdd",
+  "private": false,
   "version": "0.1.0",
+  "license": "UNLICENSED",
   "type": "module",
   "bin": {
     "sdd": "./dist/cli.js"
@@ -9,12 +10,22 @@
   "engines": {
     "node": ">=20"
   },
+  "files": [
+    "dist",
+    "templates",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://nexus.zyzbp.cn/repository/npm-hosted/"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
-    "verify:ci": "node dist/cli.js verify --ci"
+    "verify:ci": "node dist/cli.js verify --ci",
+    "pack:check": "npm pack --dry-run --json",
+    "prepublishOnly": "npm test && npm run typecheck && npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

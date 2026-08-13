@@ -7,12 +7,16 @@ import type { AuditFinding, AuditResult } from '../audit/types.js';
 import { defaultProjectConfig, readProjectConfig, writeProjectConfig, type ProjectConfig, type ProjectExecutionStrategy } from '../config/project-config.js';
 import { DomainError } from '../domain/errors.js';
 import { transitionDelivery } from '../domain/transitions.js';
-import { parseDeliveryId, parseSpecId, type ApprovalArtifact, type DeliveryId, type DeliveryMetadata, type DeliveryType, type SpecId, type SpecSummary, type WorkflowEvent } from '../domain/types.js';
+import { designImpacts, parseDeliveryId, parseSpecId, type ApprovalArtifact, type DeliveryId, type DeliveryMetadata, type DeliveryType, type DesignDecision, type DesignImpact, type SpecId, type SpecSummary, type WorkflowEvent } from '../domain/types.js';
 import { evaluateDesignGate, evaluateRequirementGate } from '../gates/requirements.js';
 import { evaluateCheckGate, evaluatePlanGate, evaluateSpecGate } from '../gates/specs.js';
 import type { GateFinding, GateResult } from '../gates/types.js';
 import { inspectGitHook, installGitHook } from '../integrations/git-hook.js';
+import { agentNames, createProjectAgentInstaller, type AgentName, type AgentSelection } from '../agents/index.js';
 import { resolveActivity, type Activity } from '../runtime/next-context.js';
+import { defaultCapabilities } from '../runtime/capabilities.js';
+import { mergeLogicalSkillRoutes, defaultLogicalSkillRoutes } from '../runtime/skill-routes.js';
+import { resolveSkillRuntime, type ResolvedSkillRuntime } from '../runtime/skill-runtime.js';
 import { LocalDeliveryRepository, LocalEventRepository } from '../storage/local-repositories.js';
 
 export type DeliveryRef = { deliveryId: DeliveryId };
@@ -23,6 +27,8 @@ export type CreateDeliveryInput = {
   type: DeliveryType;
   design?: { required: boolean; reason: string };
 };
+export type AssessDesignInput = DeliveryRef & { impacts: readonly DesignImpact[]; reason: string };
+export type DecideDesignInput = DeliveryRef & { required: boolean; reason: string; approvedBy: string };
 export type ApproveInput = DeliveryRef & { artifact: ApprovalArtifact; approvedBy: string };
 export type CommandResult = { ok: true };
 export type StatusResult = { delivery: DeliveryMetadata };
@@ -31,6 +37,7 @@ export type NextResult = {
   activity: Activity;
   requiredArtifacts: string[];
   blockers: GateFinding[];
+  skillRuntime: ResolvedSkillRuntime;
 };
 export type DoctorResult = { ok: boolean; findings: AuditFinding[]; fixes: readonly string[] };
 export type InspectionResult = {
@@ -68,6 +75,8 @@ export type SubmissionResult = {
 export type SddService = {
   init(input?: InitInput): Promise<CommandResult>;
   createDelivery(input: CreateDeliveryInput): Promise<CommandResult>;
+  assessDesign(input: AssessDesignInput): Promise<DesignDecision>;
+  decideDesign(input: DecideDesignInput): Promise<CommandResult>;
   createSpecPack(input: CreateSpecPackInput): Promise<CommandResult>;
   getStatus(input: DeliveryRef): Promise<StatusResult>;
   approve(input: ApproveInput): Promise<CommandResult>;
@@ -107,6 +116,17 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
     return deliveries.read(parseDeliveryId(id));
   }
 
+  async function getProjectConfigOrDefault(): Promise<ProjectConfig> {
+    try {
+      return await readProjectConfig(root);
+    } catch (error: unknown) {
+      if (error instanceof DomainError && error.code === 'INVALID_PROJECT_CONFIG' && error.message.includes('ENOENT')) {
+        return defaultProjectConfig;
+      }
+      throw error;
+    }
+  }
+
   async function evaluate(delivery: DeliveryMetadata): Promise<VerificationResult> {
     const activity = resolveActivity(delivery);
     if (activity === 'REQUIREMENT') return { activity, ...(await evaluateRequirementGate({ delivery, artifacts })) };
@@ -128,11 +148,27 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
     };
   }
 
+  async function nextFor(delivery: DeliveryMetadata): Promise<NextResult> {
+    const verification = await evaluate(delivery);
+    const config = await getProjectConfigOrDefault();
+    return {
+      activity: verification.activity,
+      requiredArtifacts: artifactForActivity(verification.activity, delivery),
+      blockers: verification.ok ? [] : verification.findings,
+      skillRuntime: resolveSkillRuntime({
+        activity: verification.activity,
+        routes: mergeLogicalSkillRoutes(config.logicalSkills ?? defaultLogicalSkillRoutes),
+        strategy: config.execution.strategy,
+        capabilities: defaultCapabilities,
+      }),
+    };
+  }
+
   function diagnosticFinding(code: string, message: string, artifact: string, nextStep: string): AuditFinding {
     return { code, message, artifact, nextStep };
   }
 
-  function errorMessage(error: unknown): string {
+function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
 
@@ -198,9 +234,6 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
     async createDelivery(input): Promise<CommandResult> {
       const id = parseDeliveryId(input.id);
       if (!input.title.trim()) throw new DomainError('DELIVERY_TITLE_REQUIRED', 'Delivery title is required');
-      if (input.type === 'FEATURE_CHANGE' && !input.design) {
-        throw new DomainError('DESIGN_DECISION_REQUIRED', 'Feature changes require an explicit design decision');
-      }
       const delivery: DeliveryMetadata = {
         id,
         title: input.title.trim(),
@@ -212,6 +245,45 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
       };
       await deliveries.save(delivery);
       await events.append({ type: 'delivery.created', deliveryId: id, occurredAt: new Date().toISOString() });
+      return { ok: true };
+    },
+
+    async assessDesign(input): Promise<DesignDecision> {
+      const delivery = await getDelivery(input.deliveryId);
+      if (delivery.type !== 'FEATURE_CHANGE') {
+        return { required: true, reason: input.reason, recommendation: 'RECOMMENDED', impacts: [...input.impacts] };
+      }
+      if (!input.reason.trim()) throw new DomainError('DESIGN_ASSESSMENT_REASON_REQUIRED', 'Design assessment reason is required');
+      if (input.impacts.some((impact) => !(designImpacts as readonly string[]).includes(impact))) {
+        throw new DomainError('DESIGN_IMPACT_INVALID', 'Design assessment includes an unsupported impact');
+      }
+      return {
+        required: false,
+        reason: input.reason.trim(),
+        recommendation: input.impacts.length > 0 ? 'RECOMMENDED' : 'NOT_RECOMMENDED',
+        impacts: [...input.impacts],
+      };
+    },
+
+    async decideDesign(input): Promise<CommandResult> {
+      const delivery = await getDelivery(input.deliveryId);
+      if (delivery.type !== 'FEATURE_CHANGE') {
+        throw new DomainError('DESIGN_DECISION_NOT_APPLICABLE', 'Design decisions are only required for feature changes');
+      }
+      if (!input.reason.trim() || !input.approvedBy.trim()) {
+        throw new DomainError('DESIGN_DECISION_INVALID', 'A human Design decision requires a reason and approver');
+      }
+      const updated: DeliveryMetadata = {
+        ...delivery,
+        design: { required: input.required, reason: input.reason.trim() },
+      };
+      await deliveries.save(updated);
+      await events.append({
+        type: 'design.decided',
+        deliveryId: delivery.id,
+        occurredAt: new Date().toISOString(),
+        metadata: { required: input.required, reason: input.reason.trim(), approvedBy: input.approvedBy.trim(), actorType: 'human' },
+      });
       return { ok: true };
     },
 
@@ -406,6 +478,62 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
         ));
       }
 
+      let installedAgents: AgentSelection = [];
+      try {
+        installedAgents = await installedAgentSelection(root);
+      } catch (error) {
+        findings.push(diagnosticFinding(
+          error instanceof DomainError ? error.code : 'AGENT_INSTALL_MANIFEST_INVALID',
+          errorMessage(error),
+          join('.sdd', 'runtime', 'agent-installations.json'),
+          'Run sdd agents sync --agents <selection> after restoring the Team SDD installation manifest.',
+        ));
+      }
+      if (installedAgents.length > 0) {
+        if (!await isRegularRuntimeFile(root)) {
+          findings.push(diagnosticFinding(
+            'PROJECT_PACKAGE_MISSING',
+            'Project-local @zbp/sdd MCP runtime is missing or unsafe.',
+            join('node_modules', '@zbp', 'sdd', 'dist', 'mcp-server.js'),
+            'Run npx @zbp/sdd init --agents <selection> --install.',
+          ));
+        }
+        try {
+          const inspections = await createProjectAgentInstaller().inspect({ root, agents: installedAgents });
+          for (const inspection of inspections) {
+            if (inspection.status !== 'present') {
+              findings.push(diagnosticFinding(
+                'AGENT_ADAPTER_MISSING',
+                `Team SDD Agent adapter is ${inspection.status}: ${inspection.path}`,
+                inspection.path,
+                'Run sdd agents sync --agents <selection>.',
+              ));
+            }
+          }
+        } catch (error) {
+          findings.push(diagnosticFinding(
+            error instanceof DomainError ? error.code : 'AGENT_ADAPTER_MISSING',
+            errorMessage(error),
+            '.sdd/runtime/agent-installations.json',
+            'Run sdd agents sync --agents <selection> after restoring safe project paths.',
+          ));
+        }
+        if (installedAgents.some((agent) => agent === 'claude' || agent === 'codebuddy')) {
+          try {
+            const raw = await readFile(join(root, '.mcp.json'), 'utf8');
+            const config = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+            if (!config.mcpServers?.['team-sdd']) throw new Error('team-sdd MCP server is missing');
+          } catch (error) {
+            findings.push(diagnosticFinding(
+              'MCP_SERVER_MISSING',
+              `Project MCP server is missing or invalid: ${errorMessage(error)}`,
+              '.mcp.json',
+              'Run sdd agents sync --agents <selection>.',
+            ));
+          }
+        }
+      }
+
       let hookInspection = await inspectGitHook(root);
       const fixableHookCodes = new Set(['GIT_HOOK_MISSING', 'GIT_HOOK_INVALID', 'GIT_HOOKS_PATH_INVALID']);
       const hasHookConflict = hookInspection.findings.some(({ code }) => code === 'GIT_HOOK_CONFLICT');
@@ -428,27 +556,34 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
       }
       findings.push(...hookInspection.findings);
 
-      for (const integrationPath of [join('integrations', 'claude-code'), join('integrations', 'codebuddy')]) {
-        try {
-          const metadata = await lstat(join(root, integrationPath));
-          if (!metadata.isDirectory()) {
-            findings.push(diagnosticFinding(
-              'INTEGRATION_SOURCE_INVALID',
-              `Native Agent integration source must be a directory: ${integrationPath}`,
-              integrationPath,
-              'Replace the entry with the repository-owned integration source directory.',
-            ));
-            continue;
+      try {
+        const integrations = await lstat(join(root, 'integrations'));
+        if (integrations.isDirectory() && !integrations.isSymbolicLink()) {
+          for (const integrationPath of [join('integrations', 'claude-code'), join('integrations', 'codebuddy')]) {
+            try {
+              const metadata = await lstat(join(root, integrationPath));
+              if (!metadata.isDirectory()) {
+                findings.push(diagnosticFinding(
+                  'INTEGRATION_SOURCE_INVALID',
+                  `Native Agent integration source must be a directory: ${integrationPath}`,
+                  integrationPath,
+                  'Replace the entry with the repository-owned integration source directory.',
+                ));
+                continue;
+              }
+              await access(join(root, integrationPath), constants.R_OK);
+            } catch (error) {
+              findings.push(diagnosticFinding(
+                'INTEGRATION_SOURCE_UNREADABLE',
+                `Unable to read the native Agent integration source at ${integrationPath}: ${errorMessage(error)}`,
+                integrationPath,
+                'Restore the repository-owned integration source directory.',
+              ));
+            }
           }
-          await access(join(root, integrationPath), constants.R_OK);
-        } catch (error) {
-          findings.push(diagnosticFinding(
-            'INTEGRATION_SOURCE_UNREADABLE',
-            `Unable to read the native Agent integration source at ${integrationPath}: ${errorMessage(error)}`,
-            integrationPath,
-            'Restore the repository-owned integration source directory.',
-          ));
         }
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
 
       return { ok: findings.length === 0, findings, fixes };
@@ -475,12 +610,7 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
           approvalsCurrent[artifact] = false;
         }
       }
-      const verification = await evaluate(delivery);
-      const next: NextResult = {
-        activity: verification.activity,
-        requiredArtifacts: artifactForActivity(verification.activity, delivery),
-        blockers: verification.ok ? [] : verification.findings,
-      };
+      const next = await nextFor(delivery);
       return { delivery, activity, activeSpec, next, approvalsCurrent };
     },
 
@@ -531,12 +661,39 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
 
     async getNext(input): Promise<NextResult> {
       const delivery = await getDelivery(input.deliveryId);
-      const verification = await evaluate(delivery);
-      return {
-        activity: verification.activity,
-        requiredArtifacts: artifactForActivity(verification.activity, delivery),
-        blockers: verification.ok ? [] : verification.findings,
-      };
+      return nextFor(delivery);
     },
   };
+}
+
+async function installedAgentSelection(root: string): Promise<AgentSelection> {
+  const manifestPath = join(root, '.sdd', 'runtime', 'agent-installations.json');
+  try {
+    const metadata = await lstat(manifestPath);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
+      throw new DomainError('AGENT_INSTALL_MANIFEST_INVALID', 'Team SDD Agent installation manifest must be a real file.');
+    }
+    const parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as { version?: unknown; files?: Record<string, { agent?: unknown }> };
+    if (parsed.version !== 1 || !parsed.files || typeof parsed.files !== 'object') {
+      throw new DomainError('AGENT_INSTALL_MANIFEST_INVALID', 'Team SDD Agent installation manifest is invalid.');
+    }
+    const selected = new Set<AgentName>();
+    for (const record of Object.values(parsed.files)) {
+      if ((agentNames as readonly string[]).includes(record.agent as string)) selected.add(record.agent as AgentName);
+    }
+    return agentNames.filter((agent) => selected.has(agent));
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function isRegularRuntimeFile(root: string): Promise<boolean> {
+  try {
+    const metadata = await lstat(join(root, 'node_modules', '@zbp', 'sdd', 'dist', 'mcp-server.js'));
+    return metadata.isFile() && !metadata.isSymbolicLink();
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }

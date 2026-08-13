@@ -51,6 +51,79 @@ describe('project configuration and repository enumeration', () => {
     await expect(readProjectConfig(root)).rejects.toMatchObject({ code: 'INVALID_PROJECT_CONFIG' });
   });
 
+  it('reads a strict snake_case logical_skills override from project configuration', async () => {
+    const root = await createRoot();
+    await mkdir(join(root, '.sdd'), { recursive: true });
+    await writeFile(join(root, '.sdd/config.yaml'), [
+      'version: 1',
+      'execution:',
+      '  strategy: auto',
+      'logical_skills:',
+      '  implementation:',
+      '    provider: superpowers',
+      '    skills:',
+      '      - test-driven-development',
+      'checks:',
+      '  test: [npm, test]',
+      '  typecheck: [npm, run, typecheck]',
+      '  build: [npm, run, build]',
+      '',
+    ].join('\n'));
+
+    await expect(readProjectConfig(root)).resolves.toMatchObject({
+      logicalSkills: {
+        implementation: { provider: 'superpowers', skills: ['test-driven-development'] },
+      },
+    });
+  });
+
+  it('normalizes one logical skill written as skill into the runtime skills array', async () => {
+    const root = await createRoot();
+    await mkdir(join(root, '.sdd'), { recursive: true });
+    await writeFile(join(root, '.sdd/config.yaml'), [
+      'version: 1', 'execution:', '  strategy: auto', 'logical_skills:',
+      '  implementation-plan:', '    provider: superpowers', '    skill: writing-plans',
+      'checks:', '  test: [npm, test]', '  typecheck: [npm, run, typecheck]', '  build: [npm, run, build]', '',
+    ].join('\n'));
+
+    await expect(readProjectConfig(root)).resolves.toMatchObject({
+      logicalSkills: { 'implementation-plan': { provider: 'superpowers', skills: ['writing-plans'] } },
+    });
+  });
+
+  it('rejects invalid logical skill provider and duplicate route skills', async () => {
+    const root = await createRoot();
+    await mkdir(join(root, '.sdd'), { recursive: true });
+    await writeFile(join(root, '.sdd/config.yaml'), [
+      'version: 1',
+      'execution:',
+      '  strategy: auto',
+      'logical_skills:',
+      '  implementation:',
+      '    provider: other',
+      '    skills: [test-driven-development, test-driven-development]',
+      'checks:',
+      '  test: [npm, test]',
+      '  typecheck: [npm, run, typecheck]',
+      '  build: [npm, run, build]',
+      '',
+    ].join('\n'));
+
+    await expect(readProjectConfig(root)).rejects.toMatchObject({ code: 'INVALID_PROJECT_CONFIG' });
+  });
+
+  it('rejects a skill-plus-skills route and Provider skill combinations outside the PRD route contract', async () => {
+    const root = await createRoot();
+    await mkdir(join(root, '.sdd'), { recursive: true });
+    await writeFile(join(root, '.sdd/config.yaml'), [
+      'version: 1', 'execution:', '  strategy: auto', 'logical_skills:',
+      '  requirement-analysis:', '    provider: team-sdd', '    skill: writing-plans', '    skills: [requirement]',
+      'checks:', '  test: [npm, test]', '  typecheck: [npm, run, typecheck]', '  build: [npm, run, build]', '',
+    ].join('\n'));
+
+    await expect(readProjectConfig(root)).rejects.toMatchObject({ code: 'INVALID_PROJECT_CONFIG' });
+  });
+
   it('rejects a symlinked configuration directory before init writes outside the repository', async () => {
     const root = await createRoot();
     const outside = await createRoot();

@@ -1,0 +1,11 @@
+{
+  "name": "team-sdd-project",
+  "plugins": [
+    {
+      "name": "team-sdd",
+      "source": "./plugins/team-sdd",
+      "description": "Project-local Team SDD workflow commands.",
+      "version": "0.1.0"
+    }
+  ]
+}

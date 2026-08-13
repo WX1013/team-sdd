@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { requirementPath } from '../../src/artifacts/artifact-store.js';
 import { LocalDeliveryRepository } from '../../src/storage/local-repositories.js';
 import { createSddService } from '../../src/workflow/service.js';
+import { createProjectAgentInstaller } from '../../src/agents/index.js';
 
 const execFileAsync = promisify(execFile);
 const roots: string[] = [];
@@ -145,6 +146,32 @@ exit 2
     await writeFile(join(invalidRoot, '.sdd/config.yaml'), 'version: 1\nexecution:\n  strategy: remote\n');
     await expect(createSddService({ root: invalidRoot }).doctor()).resolves.toMatchObject({
       findings: expect.arrayContaining([expect.objectContaining({ code: 'PROJECT_CONFIG_INVALID' })]),
+    });
+  });
+
+  it('diagnoses a synchronized Agent adapter with missing local runtime and command files', async () => {
+    const root = await createRoot();
+    const service = createSddService({ root });
+    await service.init();
+    await createProjectAgentInstaller().sync({ root, agents: ['claude'] });
+
+    await expect(service.doctor()).resolves.toMatchObject({
+      findings: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PROJECT_PACKAGE_MISSING',
+          nextStep: 'Run npx @zbp/sdd init --agents <selection> --install.',
+        }),
+      ]),
+    });
+
+    await rm(join(root, '.claude/commands/sdd/new.md'));
+    await expect(service.doctor()).resolves.toMatchObject({
+      findings: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'AGENT_ADAPTER_MISSING',
+          artifact: '.claude/commands/sdd/new.md',
+        }),
+      ]),
     });
   });
 

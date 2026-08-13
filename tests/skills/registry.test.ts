@@ -25,6 +25,8 @@ describe('Team SDD logical Skill Registry', () => {
     const template = definition?.renderTemplate({ delivery });
 
     expect(template).toContain('## Understanding');
+    expect(template).toContain('REQ-001');
+    expect(template).toContain('BR-001');
     expect(template).toContain('## Baseline');
     expect(template).not.toMatch(/\b(TBD|TODO)\b/i);
   });
@@ -34,6 +36,13 @@ describe('Team SDD logical Skill Registry', () => {
     const template = definition?.renderTemplate({ delivery, spec });
 
     expect(template).toContain('SP-001 · Records');
+    expect(template).toContain('REQ-001');
     expect(definition?.submissionCommand({ deliveryId: 'DLV-001', specId: 'SP-001' })).toBe('sdd submit DLV-001 spec --spec SP-001');
+  });
+
+  it('renders a Design Requirement Coverage section', () => {
+    const template = getSkillDefinition('technical-design')?.renderTemplate({ delivery });
+    expect(template).toContain('## Requirement Coverage');
+    expect(template).toContain('REQ-001');
   });
 });

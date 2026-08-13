@@ -57,4 +57,19 @@ describe('Agent Runtime', () => {
 
     expect(context.prompt).not.toContain('## Artifact Template');
   });
+
+  it('includes the resolved Provider-backed Skill runtime in portable context', () => {
+    const context = buildAgentContext({
+      delivery: { id: 'DLV-001', title: 'Records', state: 'EXECUTION' },
+      activity: 'PLAN', artifacts: [], blockers: [],
+      strategy: 'inline',
+      capabilities: { ...defaultCapabilities, skills: true },
+    });
+
+    expect(context.skillRuntime).toMatchObject({
+      provider: 'superpowers', skills: ['writing-plans'], adapter: 'native-skill', execution: 'inline',
+    });
+    expect(context.prompt).toContain('## Skill Runtime');
+    expect(context.prompt).toContain('superpowers:writing-plans');
+  });
 });

@@ -53,6 +53,11 @@ describe('Team SDD workflow service', () => {
 
     await expect(service.getNext({ deliveryId: 'DLV-001' })).resolves.toMatchObject({
       activity: 'REQUIREMENT',
+      skillRuntime: {
+        provider: 'team-sdd',
+        skills: ['requirement'],
+        adapter: 'prompt',
+      },
       blockers: expect.arrayContaining([expect.objectContaining({ code: 'REQUIREMENT_ARTIFACT_MISSING' })]),
     });
     await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ delivery: { state: 'REQUIREMENT' } });
@@ -72,5 +77,31 @@ describe('Team SDD workflow service', () => {
       deliveryState: 'DESIGN',
     });
     await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ delivery: { state: 'DESIGN' } });
+  });
+
+  it('recommends Design for a feature impact without changing Delivery state', async () => {
+    const service = createSddService({ root: await createRoot() });
+    await service.createDelivery({ id: 'DLV-001', title: 'Records API', type: 'FEATURE_CHANGE' });
+
+    await expect(service.assessDesign({
+      deliveryId: 'DLV-001', impacts: ['public_api_change'], reason: 'Adds a public endpoint',
+    })).resolves.toMatchObject({ required: false, recommendation: 'RECOMMENDED', impacts: ['public_api_change'] });
+    await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ delivery: { state: 'REQUIREMENT' } });
+  });
+
+  it('records a human Design decision as an auditable event', async () => {
+    const service = createSddService({ root: await createRoot() });
+    await service.createDelivery({ id: 'DLV-001', title: 'Records API', type: 'FEATURE_CHANGE' });
+
+    await service.decideDesign({
+      deliveryId: 'DLV-001', required: true, reason: 'Reviewed API impact', approvedBy: 'reviewer',
+    });
+
+    await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({
+      delivery: { design: { required: true, reason: 'Reviewed API impact' } },
+    });
+    await expect(service.events({ deliveryId: 'DLV-001' })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'design.decided', metadata: expect.objectContaining({ approvedBy: 'reviewer' }) }),
+    ]));
   });
 });

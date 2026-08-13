@@ -1,0 +1,7 @@
+{
+  "name": "team-sdd",
+  "version": "0.1.0",
+  "description": "Project-local Team SDD workflow commands.",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

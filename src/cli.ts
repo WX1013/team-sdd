@@ -1,12 +1,23 @@
+#!/usr/bin/env node
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { Command, Option } from 'commander';
 import type { ProjectExecutionStrategy } from './config/project-config.js';
-import { parseDeliveryId, type DeliveryMetadata } from './domain/types.js';
+import { designImpacts, parseDeliveryId, type DeliveryMetadata } from './domain/types.js';
 import { createAgentContextService } from './workflow/agent-context-service.js';
 import { defaultCapabilities } from './runtime/capabilities.js';
+import { planProgress } from './runtime/plan-progress.js';
 import { getSkillDefinition } from './skills/registry.js';
 import { createSddService } from './workflow/service.js';
+import { createProjectAgentInstaller, installCurrentPackage, parseAgentSelection, registerCodexProjectMarketplace, type ProjectAgentInstaller } from './agents/index.js';
 
 export type CliResult = { exitCode: number; stdout: string; stderr: string };
+export type CliDependencies = {
+  projectAgentInstaller?: ProjectAgentInstaller;
+  installCurrentPackage?: typeof installCurrentPackage;
+  registerCodexProjectMarketplace?: typeof registerCodexProjectMarketplace;
+  packageManifest?: { name: string; version: string };
+};
 
 function displayState(state: string): string {
   return state.charAt(0) + state.slice(1).toLowerCase().replaceAll('_', ' ');
@@ -38,6 +49,18 @@ function displaySpecPacks(delivery: DeliveryMetadata): string {
     .join('\n');
 }
 
+async function displayActivePlanProgress(root: string, delivery: DeliveryMetadata, activity: string): Promise<string | undefined> {
+  const active = delivery.specs.find((spec) => spec.state !== 'DONE');
+  if (!active || !['PLAN', 'CODE', 'CHECK'].includes(activity)) return undefined;
+  try {
+    const plan = await readFile(join(root, 'sdd', 'deliveries', delivery.id, 'specs', active.id, 'plan.md'), 'utf8');
+    const progress = planProgress(plan);
+    return `Plan\n────────────────────\n${progress.completed} / ${progress.total} tasks`;
+  } catch {
+    return undefined;
+  }
+}
+
 function displayConfig(config: { version: number; execution: { strategy: string } }): string {
   return `version: ${config.version}\nexecution.strategy: ${config.execution.strategy}`;
 }
@@ -47,26 +70,78 @@ function parseExecutionStrategy(input: string): ProjectExecutionStrategy {
   throw new Error('Strategy must be one of: auto, inline, subagent');
 }
 
+function parseDesignImpacts(input: readonly string[]): (typeof designImpacts)[number][] {
+  if (input.some((impact) => !(designImpacts as readonly string[]).includes(impact))) {
+    throw new Error(`Unsupported Design impact. Use one of: ${designImpacts.join(', ')}`);
+  }
+  return [...input] as (typeof designImpacts)[number][];
+}
+
 function writeJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-export async function runCli(args: string[], root = process.cwd()): Promise<CliResult> {
+export async function runCli(args: string[], root = process.cwd(), dependencies: CliDependencies = {}): Promise<CliResult> {
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
   const service = createSddService({ root });
   const agentContextService = createAgentContextService(service);
+  const projectAgentInstaller = dependencies.projectAgentInstaller ?? createProjectAgentInstaller();
+  const packageManifest = dependencies.packageManifest ?? { name: '@zbp/sdd', version: '0.1.0' };
   const program = new Command();
   program.name('sdd').exitOverride().configureOutput({
     writeOut: (value) => { stdout += value; },
     writeErr: (value) => { stderr += value; },
   });
 
-  program.command('init').action(async () => {
+  async function synchronizeAgents(options: { agents: string; install?: boolean; registerCodex?: boolean }): Promise<void> {
+    const agents = parseAgentSelection(options.agents);
+    if (options.registerCodex && !agents.includes('codex')) {
+      throw new Error('--register-codex requires selecting codex');
+    }
+    if (options.install) {
+      await (dependencies.installCurrentPackage ?? installCurrentPackage)({
+        root,
+        packageName: packageManifest.name,
+        version: packageManifest.version,
+      });
+    }
+    const result = await projectAgentInstaller.sync({ root, agents });
+    if (result.installed.length > 0) stdout += `Agent files installed or updated:\n${result.installed.map((path) => `- ${path}`).join('\n')}\n`;
+    if (result.unchanged.length > 0) stdout += `Agent files already current:\n${result.unchanged.map((path) => `- ${path}`).join('\n')}\n`;
+    if (result.warnings.length > 0) stdout += `Agent installation warnings:\n${result.warnings.map((warning) => `- ${warning}`).join('\n')}\n`;
+    if (options.registerCodex) {
+      await (dependencies.registerCodexProjectMarketplace ?? registerCodexProjectMarketplace)({ root });
+      stdout += 'Registered the project-local Codex plugin.\n';
+    } else if (agents.includes('codex')) {
+      stdout += 'Codex registration was not run. To register this project-local plugin, rerun with --register-codex.\n';
+    }
+  }
+
+  program.command('init')
+    .option('--agents <agents>', 'install project Agent adapters: all|claude|codex|codebuddy')
+    .option('--install', 'add this exact package as a project dev dependency')
+    .option('--register-codex', 'register the project-local Codex marketplace')
+    .action(async (options: { agents?: string; install?: boolean; registerCodex?: boolean }) => {
     await service.init();
     stdout += 'Initialized Team SDD repository.\n';
+    if (options.agents) {
+      await synchronizeAgents({
+        agents: options.agents,
+        install: options.install,
+        registerCodex: options.registerCodex,
+      });
+    }
   });
+
+  const agents = program.command('agents');
+  agents.command('sync')
+    .requiredOption('--agents <agents>')
+    .option('--register-codex')
+    .action(async (options: { agents: string; registerCodex?: boolean }) => {
+      await synchronizeAgents(options);
+    });
 
   program.command('new <deliveryId>')
     .requiredOption('--title <title>')
@@ -97,6 +172,7 @@ export async function runCli(args: string[], root = process.cwd()): Promise<CliR
     const current = activeSpec && ['PLAN', 'CODE', 'CHECK'].includes(next.activity)
       ? `${activeSpec.id} / ${displayState(next.activity)}`
       : displayState(next.activity);
+    const progress = await displayActivePlanProgress(root, delivery, next.activity);
     stdout += [
       `${delivery.id} · ${delivery.title}`,
       '',
@@ -115,6 +191,7 @@ export async function runCli(args: string[], root = process.cwd()): Promise<CliR
       'Next',
       '────────────────────',
       `sdd next ${delivery.id}`,
+      ...(progress ? ['', progress] : []),
       '',
     ].join('\n');
   });
@@ -124,6 +201,25 @@ export async function runCli(args: string[], root = process.cwd()): Promise<CliR
     .action(async (deliveryId, artifact, options) => {
       await service.approve({ deliveryId: parseDeliveryId(deliveryId), artifact, approvedBy: options.by });
       stdout += `Approved ${artifact} for ${deliveryId}.\n`;
+    });
+
+  const design = program.command('design');
+  design.command('assess <deliveryId>')
+    .requiredOption('--reason <reason>')
+    .option('--impact <impacts...>')
+    .option('--json')
+    .action(async (deliveryId, options: { reason: string; impact?: string[]; json?: boolean }) => {
+      const result = await service.assessDesign({ deliveryId: parseDeliveryId(deliveryId), reason: options.reason, impacts: parseDesignImpacts(options.impact ?? []) });
+      stdout += options.json ? writeJson(result) : `Design recommendation: ${result.recommendation}\nImpacts: ${result.impacts.join(', ') || 'none'}\n`;
+    });
+  design.command('decide <deliveryId>')
+    .requiredOption('--required <required>')
+    .requiredOption('--reason <reason>')
+    .requiredOption('--by <name>')
+    .action(async (deliveryId, options: { required: string; reason: string; by: string }) => {
+      if (!['true', 'false'].includes(options.required)) throw new Error('--required must be true or false');
+      await service.decideDesign({ deliveryId: parseDeliveryId(deliveryId), required: options.required === 'true', reason: options.reason, approvedBy: options.by });
+      stdout += `Recorded human Design decision for ${deliveryId}.\n`;
     });
 
   program.command('verify [deliveryId]')
@@ -261,6 +357,12 @@ export async function runCli(args: string[], root = process.cwd()): Promise<CliR
   program.command('next <deliveryId>').action(async (deliveryId) => {
     const result = await service.getNext({ deliveryId: parseDeliveryId(deliveryId) });
     stdout += `Activity: ${result.activity}\n`;
+    stdout += `Provider: ${result.skillRuntime.provider}\n`;
+    stdout += `Skills: ${result.skillRuntime.skills.join(', ')}\n`;
+    stdout += `Adapter: ${result.skillRuntime.adapter}\n`;
+    stdout += `Execution: ${result.skillRuntime.execution}\n`;
+    stdout += `${result.skillRuntime.instructions.join('\n')}\n`;
+    if (result.skillRuntime.blockers.length > 0) stdout += `${displayFindings('Skill runtime is blocked.', result.skillRuntime.blockers)}\n`;
     if (result.blockers.length > 0) stdout += `${displayFindings(`Cannot proceed from ${displayState(result.activity)}.`, result.blockers)}\n`;
     if (result.requiredArtifacts.length > 0) stdout += `Artifacts: ${result.requiredArtifacts.join(', ')}\n`;
   });

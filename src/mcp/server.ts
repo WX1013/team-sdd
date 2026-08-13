@@ -2,7 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   approveInputSchema,
+  assessDesignInputSchema,
   contextInputSchema,
+  decideDesignInputSchema,
   createToolHandlers,
   newInputSchema,
   nextInputSchema,
@@ -54,6 +56,16 @@ export function createMcpServer(): McpServer {
     description: 'Get Engine-governed agent instructions, paths, and blockers.',
     inputSchema: contextInputSchema,
   }, async (input) => jsonResult(await tools.sdd_get_context(input)));
+  server.registerTool('sdd_assess_design', {
+    title: 'Assess Team SDD Design need',
+    description: 'Recommend whether a feature change needs Design without changing state.',
+    inputSchema: assessDesignInputSchema,
+  }, async (input) => jsonResult(await tools.sdd_assess_design(input)));
+  server.registerTool('sdd_decide_design', {
+    title: 'Record human Team SDD Design decision',
+    description: 'Record an auditable human Design decision for a feature change.',
+    inputSchema: decideDesignInputSchema,
+  }, async (input) => jsonResult(await tools.sdd_decide_design(input)));
 
   return server;
 }

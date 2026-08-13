@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "team-sdd": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "node_modules/@zbp/sdd/dist/mcp-server.js"
+      ]
+    }
+  }
+}

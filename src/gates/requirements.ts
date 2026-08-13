@@ -1,13 +1,14 @@
 import { ArtifactStore, validateRequiredSections } from '../artifacts/artifact-store.js';
 import type { ApprovalArtifact, DeliveryMetadata } from '../domain/types.js';
 import type { GateFinding, GateResult } from './types.js';
+import { coverageFindingIds, requirementIds } from './coverage.js';
 
 type GateInput = { delivery: DeliveryMetadata; artifacts: ArtifactStore };
 
 const designSections = [
   'System Boundary', 'Overall Architecture', 'Module Design', 'Data Model', 'API',
   'Core Flow', 'Permissions', 'Error Handling', 'Performance', 'Security',
-  'Observability', 'Deployment', 'Compatibility / Migration', 'Test Strategy', 'Technical Risks',
+  'Observability', 'Deployment', 'Compatibility / Migration', 'Test Strategy', 'Technical Risks', 'Requirement Coverage',
 ] as const;
 
 function finding(code: string, message: string, artifact: string, nextStep: string): GateFinding {
@@ -54,6 +55,14 @@ export async function evaluateRequirementGate(input: GateInput): Promise<GateRes
   if (!(await hasCurrentApproval(input, 'requirement'))) {
     findings.push(finding('REQUIREMENT_APPROVAL_MISSING', 'Requirement has no current human approval.', 'requirement.md', 'Request a human approval for the current artifact hash.'));
   }
+  if (input.delivery.type === 'FEATURE_CHANGE' && !input.delivery.design) {
+    findings.push(finding(
+      'DESIGN_DECISION_MISSING',
+      'Feature change requires a human Design decision before it can advance.',
+      'delivery.yaml',
+      'Record a human Design decision with required=true or required=false and a reason.',
+    ));
+  }
 
   return findings.length === 0 ? { ok: true } : { ok: false, findings };
 }
@@ -69,6 +78,12 @@ export async function evaluateDesignGate(input: GateInput): Promise<GateResult> 
   }
 
   let markdown = '';
+  let requirement = '';
+  try {
+    requirement = await input.artifacts.read({ deliveryId: input.delivery.id, kind: 'requirement' });
+  } catch {
+    // The Requirement Gate reports its missing source artifact separately.
+  }
   try {
     markdown = await input.artifacts.read({ deliveryId: input.delivery.id, kind: 'design' });
   } catch {
@@ -77,6 +92,14 @@ export async function evaluateDesignGate(input: GateInput): Promise<GateResult> 
 
   if (markdown) {
     findings.push(...findingsFromSections(validateRequiredSections(markdown, designSections), 'design.md', 'DESIGN'));
+    for (const id of coverageFindingIds(requirementIds(requirement), markdown)) {
+      findings.push(finding(
+        'DESIGN_REQUIREMENT_COVERAGE_MISSING',
+        `Design does not cover Requirement identifier ${id}.`,
+        'design.md',
+        `Add ${id} to the Design Requirement Coverage section.`,
+      ));
+    }
   }
   if (!(await hasCurrentApproval(input, 'design'))) {
     findings.push(finding('DESIGN_APPROVAL_MISSING', 'Design has no current human approval.', 'design.md', 'Request a human approval for the current artifact hash.'));

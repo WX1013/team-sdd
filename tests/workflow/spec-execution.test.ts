@@ -7,7 +7,9 @@ import { createSddService } from '../../src/workflow/service.js';
 
 const roots: string[] = [];
 const validSpec = '# Spec\n\n## Goal\n\nRecords\n\n## Requirement Sources\n\nBaseline\n\n## Scope\n\nRecords\n\n## Out of Scope\n\nNone\n\n## Acceptance Criteria\n\n- AC-001 Create record\n\n## Dependencies\n\nNone\n\n## Constraints\n\nNone\n\n## Expected Impact\n\nLocal';
-const validDesign = '# Design\n\n## System Boundary\n\nLocal service\n\n## Overall Architecture\n\nSingle module\n\n## Module Design\n\nWorkflow service\n\n## Data Model\n\nDelivery metadata\n\n## API\n\nCLI\n\n## Core Flow\n\nApproved submissions\n\n## Permissions\n\nHuman approvals\n\n## Error Handling\n\nStructured findings\n\n## Performance\n\nLocal files\n\n## Security\n\nValidated paths\n\n## Observability\n\nEvent log\n\n## Deployment\n\nPackage install\n\n## Compatibility / Migration\n\nNone\n\n## Test Strategy\n\nIntegration tests\n\n## Technical Risks\n\nArtifact drift';
+const validDesign = '# Design\n\n## System Boundary\n\nLocal service\n\n## Overall Architecture\n\nSingle module\n\n## Module Design\n\nWorkflow service\n\n## Data Model\n\nDelivery metadata\n\n## API\n\nCLI\n\n## Core Flow\n\nApproved submissions\n\n## Permissions\n\nHuman approvals\n\n## Error Handling\n\nStructured findings\n\n## Performance\n\nLocal files\n\n## Security\n\nValidated paths\n\n## Observability\n\nEvent log\n\n## Deployment\n\nPackage install\n\n## Compatibility / Migration\n\nNone\n\n## Test Strategy\n\nIntegration tests\n\n## Technical Risks\n\nArtifact drift\n\n## Requirement Coverage\n\nNo stable requirement identifiers are present.';
+const validPlan = '# Plan\n\n### Task 1: Create record\n\nCovers AC-001\n\n#### Test\n\n- [ ] unit test\n\n#### Implementation\n\n- [ ] create record\n\n#### Verification\n\n- [ ] npm test';
+const validCheck = '# Check\n\n## Automated Verification\n\nTests PASS\nBuild PASS\n\n## Acceptance Criteria\n\n- AC-001 PASS\n\n## Code Review\n\nCritical Issues: 0\nImportant Issues: 0\n\n## Fresh Verification Evidence\n\n- npm test · PASS';
 
 async function createRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'team-sdd-execution-'));
@@ -39,10 +41,10 @@ describe('Spec execution submission', () => {
     const service = createSddService({ root });
     await setupExecution(service, root);
     const directory = specDirectory(root, 'DLV-001', 'SP-001');
-    await writeFile(join(directory, 'plan.md'), '# Plan\n\n### Task 1: Create record\n\nCovers AC-001\n\nVerification: unit test');
+    await writeFile(join(directory, 'plan.md'), validPlan);
 
     await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'plan', specId: 'SP-001' })).resolves.toMatchObject({ advanced: true, specState: 'CODE' });
-    await writeFile(join(directory, 'check.md'), '# Check\n\nTests PASS\n\nBuild PASS\n\nAcceptance Criteria PASS');
+    await writeFile(join(directory, 'check.md'), validCheck);
     await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', specId: 'SP-001', evidence: { tests: ['unit'], build: 'npm run build', staticChecks: ['npm run typecheck'] } })).resolves.toMatchObject({ advanced: true, specState: 'DONE', deliveryState: 'CHECK' });
 
     await writeFile(join(root, 'sdd/deliveries/DLV-001/check.md'), '# Delivery Check\n\nRequirement Coverage: 100%');
@@ -54,9 +56,9 @@ describe('Spec execution submission', () => {
     const service = createSddService({ root });
     await setupExecution(service, root);
     const directory = specDirectory(root, 'DLV-001', 'SP-001');
-    await writeFile(join(directory, 'plan.md'), '# Plan\n\n### Task 1: Create record\n\nCovers AC-001\n\nVerification: unit test');
+    await writeFile(join(directory, 'plan.md'), validPlan);
     await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'plan', specId: 'SP-001' });
-    await writeFile(join(directory, 'check.md'), '# Check\n\nTests PASS\n\nBuild PASS\n\nAcceptance Criteria PASS');
+    await writeFile(join(directory, 'check.md'), validCheck);
 
     await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', specId: 'SP-001', evidence: { tests: [], build: '', staticChecks: [] } })).resolves.toMatchObject({
       accepted: false,
@@ -97,9 +99,9 @@ describe('Spec execution submission', () => {
     await writeFile(join(directory, 'spec.md'), validSpec);
     await service.approve({ deliveryId: 'DLV-001', artifact: 'spec', approvedBy: 'wangxin' });
     await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'spec', specId: 'SP-001' });
-    await writeFile(join(directory, 'plan.md'), '# Plan\n\n### Task 1: Create record\n\nCovers AC-001\n\nVerification: unit test');
+    await writeFile(join(directory, 'plan.md'), validPlan);
     await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'plan', specId: 'SP-001' });
-    await writeFile(join(directory, 'check.md'), '# Check\n\nTests PASS\n\nBuild PASS\n\nAcceptance Criteria PASS');
+    await writeFile(join(directory, 'check.md'), validCheck);
     await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', specId: 'SP-001', evidence: { tests: ['unit'], build: 'npm run build', staticChecks: ['npm run typecheck'] } });
     await writeFile(join(root, 'sdd/deliveries/DLV-001/check.md'), '# Delivery Check\n\nRequirement Coverage: 100%');
     await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', evidence: { integration: ['integration'], regression: ['regression'], deliveryAcceptance: ['acceptance'] } });
