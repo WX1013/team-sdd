@@ -45,14 +45,32 @@ describe('Nexus publish package', () => {
     ]));
   });
 
-  it('documents the Chinese first-install flow before status usage', async () => {
+  it('documents three-chapter onboarding for any project and every supported Agent', async () => {
     const readme = await readFile('README.md', 'utf8');
 
-    expect(readme).toContain('## 安装与初始化');
-    expect(readme).toContain('## 自定义项目配置');
+    expect(readme).toContain('## 1. 首次安装');
+    expect(readme).toContain('## 2. 完成第一个 Delivery');
+    expect(readme).toContain('## 3. Team SDD 工作流、治理与自定义');
+    expect(readme).toContain('### CodeBuddy 桌面程序');
+    expect(readme).toContain('### Codex 桌面程序');
+    expect(readme).toContain('### Claude Code 命令行');
+    expect(readme).toContain('/sdd:new DLV-001 "会员中心 V1" APPLICATION_INIT');
+    expect(readme).toContain('/sdd-new DLV-001 "会员中心 V1" APPLICATION_INIT');
+    expect(readme).toContain('`npx sdd` 是备用入口');
     expect(readme).toContain('[MAINTAINERS.md](./MAINTAINERS.md)');
-    expect(readme).toContain('npx @zbp/sdd init --agents all --install --register-codex');
+    expect(readme).toContain('npx @zbp/sdd init --agents claude --install');
+    expect(readme).toContain('npx @zbp/sdd init --agents codebuddy --install');
+    expect(readme).toContain('npx @zbp/sdd init --agents codex --install --register-codex');
+    expect(readme).toContain('`package.json` 不存在时');
+    expect(readme).toContain('"private": true');
+    expect(readme).toContain('Requirement → Technical Design（按类型/人工决定） → Spec Pack → Plan → Code → Check → Done');
     expect(readme.indexOf('sdd new DLV-001')).toBeLessThan(readme.indexOf('sdd status DLV-001'));
+    const codeBuddyApproval = readme.indexOf('/sdd:approve DLV-001 requirement "产品负责人"');
+    expect(codeBuddyApproval).toBeGreaterThan(-1);
+    expect(readme.indexOf('/sdd:next DLV-001', codeBuddyApproval)).toBeGreaterThan(codeBuddyApproval);
+    const codexApproval = readme.indexOf('/sdd-approve DLV-001 requirement "产品负责人"');
+    expect(codexApproval).toBeGreaterThan(-1);
+    expect(readme.indexOf('/sdd-next DLV-001', codexApproval)).toBeGreaterThan(codexApproval);
     expect(readme).toContain('@zbp:registry=https://nexus.zyzbp.cn/repository/npm-hosted/');
   });
 });

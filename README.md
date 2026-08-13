@@ -1,137 +1,171 @@
 # Team SDD Core
 
-`@zbp/sdd` 是面向项目的受治理开发工作流工具。它提供 CLI、MCP Server 和 Claude Code、Codex、CodeBuddy 的项目级适配：你创建 Delivery、按提示编写产物、提交产物，Core 负责校验 Gate、审批状态和事件审计。
+`@zbp/sdd` 是面向团队的受治理研发工作流：Agent 负责完成产物，Core 负责 Gate、审批、状态和事件审计。它可用于 Node、Java、Go、Python、.NET 等任意工程，并支持 Claude Code、CodeBuddy 与 Codex 的项目级使用。
 
-本页只说明如何在业务项目中安装、使用和配置。维护本包、运行测试、发布 Nexus 版本，请阅读 [MAINTAINERS.md](./MAINTAINERS.md)。
+本页面向业务项目使用者。维护、测试和 Nexus 发布请阅读 [MAINTAINERS.md](./MAINTAINERS.md)。
 
-## 安装与初始化
+## 1. 首次安装
 
-前提：Node.js 20 或更高版本，且项目根目录已有 `package.json`。
-
-首次使用时，在个人 `~/.npmrc` 或 CI Secret 中配置 Nexus；不要把 Token 或 `.npmrc` 提交到项目：
+前提是 Node.js 20 或更高版本，以及能访问团队 Nexus。首次使用时，在个人 `~/.npmrc` 或 CI Secret 配置 Scope Registry；不要将 Token 或 `.npmrc` 提交到项目：
 
 ```ini
 @zbp:registry=https://nexus.zyzbp.cn/repository/npm-hosted/
 ```
 
-在目标项目根目录执行一次初始化。下列命令会安装当前包为项目开发依赖、创建 `.sdd/config.yaml`、安全合并 `.mcp.json` 的 `team-sdd` Server，并安装三种 Agent 的项目级适配：
+在目标工程根目录选择正在使用的 Agent，执行对应的一条命令。无论项目原本是何种技术栈，显式 `--install` 都会将 Team SDD 安装为该项目的开发依赖，并创建 `.sdd/`、所选 Agent 的项目级命令，以及所需的 MCP 配置。
 
-```bash
-npx @zbp/sdd init --agents all --install --register-codex
+`package.json` 不存在时，安装器只会创建下面这个最小私有清单，再安装 Team SDD；不会创建或修改 Maven、Gradle、Cargo、Poetry、pip、NuGet 等其他依赖文件。已有的普通 `package.json` 不会被覆盖。
+
+```json
+{
+  "private": true
+}
 ```
 
-只使用部分 Agent 时可改为：
+### Claude Code
 
 ```bash
-# 只安装 Claude Code
 npx @zbp/sdd init --agents claude --install
-
-# 安装 Codex 与 CodeBuddy；Codex 需要显式注册本项目插件
-npx @zbp/sdd init --agents codex,codebuddy --install --register-codex
 ```
 
-安装完成后，后续在项目根目录使用 `npx sdd ...`。已安装版本会来自当前项目的 `node_modules`，不会依赖一次性的 npx 缓存。
+重新加载当前项目后，使用 `/sdd:new`、`/sdd:next`、`/sdd:status`、`/sdd:approve`、`/sdd:doctor`。命令和 Skill 会写入 `.claude/`，项目根目录 `.mcp.json` 中会安全合并 `team-sdd` Server。
 
-## 快速开始
-
-```bash
-# 1. 创建工作项
-npx sdd new DLV-001 --title "会员资料查询" --type FEATURE_CHANGE
-
-# 2. 对 Feature 先评估是否需要技术设计；此步骤不改变状态
-npx sdd design assess DLV-001 \
-  --impact public_api_change \
-  --reason "新增查询接口"
-
-# 3. 由人类记录最终决定，才允许需求向后推进
-npx sdd design decide DLV-001 \
-  --required true \
-  --reason "接口变更需要设计评审" \
-  --by "wangx"
-
-# 4. 查看状态与下一步
-npx sdd status DLV-001
-npx sdd next DLV-001
-```
-
-`next` 不会自动启动外部 Agent。它会显示当前活动、实际 Provider/Skill、可用适配方式、执行策略、产物路径和必须先解决的阻塞项。按照其指令完成产物后，通过 `submit` 提交；不要直接修改 `delivery.yaml` 或事件日志。
-
-## 日常工作流
-
-| 目标 | 命令 |
-|---|---|
-| 查看当前进度、Spec 与计划任务完成数 | `npx sdd status DLV-001` |
-| 获取下一步与 Skill 指令 | `npx sdd next DLV-001` |
-| 生成 Requirement / Design / Spec 模板 | `npx sdd template requirement DLV-001`<br>`npx sdd template design DLV-001`<br>`npx sdd template spec DLV-001 --spec SP-001` |
-| 人类审批 Requirement、Design 或 Spec 集 | `npx sdd approve DLV-001 requirement --by "姓名"` |
-| 创建 Spec Pack | `npx sdd spec create DLV-001 SP-001 --title "查询接口" --acceptance-criterion AC-001` |
-| 提交产物 | `npx sdd submit DLV-001 requirement`<br>`npx sdd submit DLV-001 design`<br>`npx sdd submit DLV-001 spec --spec SP-001` |
-| 提交计划和检查证据 | `npx sdd submit DLV-001 plan --spec SP-001`<br>`npx sdd submit DLV-001 check --spec SP-001 --tests "npm test" --build "npm run build" --static-check "npm run typecheck"` |
-| 校验当前 Gate | `npx sdd verify DLV-001` |
-
-产物约定由 Gate 强制校验：Requirement 中使用 `REQ-###` 与 `BR-###`；Design 的 `Requirement Coverage` 和全部 Spec 的 `Requirement Sources` 覆盖这些标识；每个 Plan Task 要有 Test、Implementation、Verification；Spec Check 要记录每个 AC 的 PASS、零 Critical/Important 审查问题和新鲜验证证据。
-
-## 原生 Agent 如何介入
-
-三个 Agent 都遵循同一边界：先从项目内 Core 获取 Context，再按 `skillRuntime.instructions` 执行，最后仅通过 Core 提交产物或审批。它们不直接改动 `.sdd`、Delivery metadata、审批或 Event Log。选择你正在使用的桌面应用即可，无需同时安装三者。
-
-### CodeBuddy：在桌面会话中介入
-
-适用于在 CodeBuddy 桌面应用中对当前项目进行需求、设计、实现或验证。首次在项目根目录执行：
+### CodeBuddy
 
 ```bash
 npx @zbp/sdd init --agents codebuddy --install
 ```
 
-重新打开该项目后，使用 `/sdd:new` 创建工作项，使用 `/sdd:next` 获取下一步并继续；也可使用 `/sdd:status`、`/sdd:approve`、`/sdd:doctor`。安装结果位于 `.codebuddy/commands/sdd/`。
+重新打开当前项目后，使用 `/sdd:new`、`/sdd:next`、`/sdd:status`、`/sdd:approve`、`/sdd:doctor`。命令和 Skill 会写入 `.codebuddy/`。若项目已有 `.mcp.json`，安装器保留全部已有 MCP Server，只合并 `team-sdd`，绝不覆盖原配置。
 
-### Codex：通过项目插件介入
-
-适用于在 Codex 桌面应用中把 Team SDD 作为项目插件使用。首次执行：
+### Codex
 
 ```bash
 npx @zbp/sdd init --agents codex --install --register-codex
 ```
 
-`--register-codex` 会显式注册当前项目的本地 Marketplace；完成后重新打开项目。在 Codex 中使用 `/sdd-new`、`/sdd-next`、`/sdd-status`、`/sdd-approve`、`/sdd-doctor`。插件文件位于 `.agents/plugins/team-sdd/`；Codex 使用连字符而不是冒号。
+`--register-codex` 会显式注册本项目的本地 Marketplace；完成后重新打开项目。在 Codex 使用 `/sdd-new`、`/sdd-next`、`/sdd-status`、`/sdd-approve`、`/sdd-doctor`。Codex 使用连字符命令，插件文件位于 `.agents/plugins/team-sdd/`。
 
-### Claude Code：通过项目命令介入
-
-适用于在 Claude Code 中围绕当前项目执行受治理开发流程。首次执行：
+安装完成后，所有工程都可在根目录用 `npx sdd ...` 调用当前项目已安装的版本。后续增加或更新适配时运行：
 
 ```bash
-npx @zbp/sdd init --agents claude --install
+npx sdd agents sync --agents claude
+npx sdd agents sync --agents codebuddy
+npx sdd agents sync --agents codex --register-codex
 ```
 
-重新加载 Claude Code 的项目后，使用 `/sdd:new`、`/sdd:next`、`/sdd:status`、`/sdd:approve`、`/sdd:doctor`。命令文件位于 `.claude/commands/sdd/`，并使用当前项目内的 MCP Server。
+同步只更新 Team SDD 记录且未被用户修改的文件；出现同名命令或 `team-sdd` MCP 冲突时会停止，而不会覆盖用户配置。
 
-### 同步或切换 Agent
+## 2. 完成第一个 Delivery
 
-需要新增、更新或组合多个 Agent 时，运行：
+下面用新应用 `DLV-001` 演示从开始到完成的完整过程。请按实际使用的入口执行；三种方式都调用同一个 Core，状态、审批和事件记录完全一致。Agent 负责按 `next` 返回的指引创建产物、调用受治理的 Core 提交；人只在需要审批时明确授权。
+
+### CodeBuddy 桌面程序
+
+在 CodeBuddy 桌面程序中打开项目，依次输入：
+
+```text
+/sdd:new DLV-001 "会员中心 V1" APPLICATION_INIT
+/sdd:next DLV-001
+```
+
+根据 `next` 的结果让 Agent 完成当前产物。Requirement 完成后，由产品负责人明确授权并输入：
+
+```text
+/sdd:approve DLV-001 requirement "产品负责人"
+/sdd:next DLV-001
+```
+
+`APPLICATION_INIT` 接着会要求完成并审批 Technical Design；随后创建和审批 Spec Pack。每完成一个阶段，都执行 `/sdd:next DLV-001` 获取唯一允许的下一步。实现、测试与 Check 由 Agent 按返回的 Provider、Skill 和检查项完成；随时可用 `/sdd:status DLV-001` 查看状态。
+
+### Codex 桌面程序
+
+在 Codex 桌面程序中打开项目，使用连字符形式：
+
+```text
+/sdd-new DLV-001 "会员中心 V1" APPLICATION_INIT
+/sdd-next DLV-001
+```
+
+完成 Requirement 后，由产品负责人明确授权：
+
+```text
+/sdd-approve DLV-001 requirement "产品负责人"
+/sdd-next DLV-001
+```
+
+之后按照每次 `/sdd-next DLV-001` 的指引完成 Design、Spec Pack、Plan、Code 与 Check。用 `/sdd-status DLV-001` 查看进度。Codex 不使用冒号形式，这是它的命令语法限制。
+
+### Claude Code 命令行
+
+在项目根目录启动 Claude Code 后，在 Claude Code 的命令行中使用冒号形式：
+
+```text
+/sdd:new DLV-001 "会员中心 V1" APPLICATION_INIT
+/sdd:next DLV-001
+```
+
+Requirement 完成后，由产品负责人明确授权：
+
+```text
+/sdd:approve DLV-001 requirement "产品负责人"
+/sdd:next DLV-001
+```
+
+此后继续按 `/sdd:next DLV-001` 返回的步骤完成 Design、Spec Pack、Plan、Code 与 Check；用 `/sdd:status DLV-001` 查看进度。Claude Code 的命令运行在终端，但与桌面 Agent 使用相同的项目级 MCP 和治理边界。
+
+三个入口的共同节奏是：创建 Delivery → `next` 完成当前产物 → 人工 `approve`（Requirement、Design、Spec）→ 再次 `next`。最后 `/sdd:status` 显示 `DONE`。如果 `next` 返回阻塞项，先修复该项，不要手工修改 `delivery.yaml` 或事件文件。
+
+`npx sdd` 是备用入口，适合没有 Agent、CI、脚本或排障；它不是上述团队日常协作的主入口。例如可运行 `npx sdd doctor`、`npx sdd status DLV-001` 和 `npx sdd verify DLV-001`。
+
+## 3. Team SDD 工作流、治理与自定义
+
+核心流程遵循 PRD：
+
+```text
+Requirement → Technical Design（按类型/人工决定） → Spec Pack → Plan → Code → Check → Done
+```
+
+`APPLICATION_INIT` 必须经过 Technical Design。`FEATURE_CHANGE` 需要由人记录 Design Decision；只有明确决定“不需要”时才跳过 Design。Agent 可以分析、写产物、执行代码和测试；Engine 才能校验 Gate、保存事件并推进状态；Human Gate 只发生在 Requirement、Design、Spec Split 三处。
+
+| 环节 | 主要产物 | 通过条件 | 常用动作 |
+|---|---|---|---|
+| Requirement | `requirement.md` | Source、Scope、无阻塞问题、Baseline、人工审批 | `template requirement`、`approve`、`submit` |
+| Technical Design | `design.md` | 必填设计章节、需求覆盖、人工审批 | `template design`、`approve`、`submit` |
+| Spec Pack | `specs/SP-*/spec.md` | 完整结构、依赖合法、需求覆盖、整体人工审批 | `spec create`、`template spec`、`approve`、`submit` |
+| Plan | `plan.md` | 每个 AC 有 Task 覆盖；每项有 Test、Implementation、Verification | `submit ... plan` |
+| Code | 项目代码与测试 | 按 `next` 给出的 Provider、Skill 和策略完成 | `next` |
+| Check | Spec/Delivery `check.md` | 测试、构建、静态检查、AC、审查与新鲜证据均通过 | `submit ... check` |
+
+### 审批、状态与事件
+
+Requirement、Design、Spec 的审批均绑定当前产物的 SHA-256 hash。审批后修改文件会自动使审批失效，必须重新审批。`delivery.yaml` 和 `.sdd/events/*.jsonl` 是 Engine 管理的事实记录；不要手工修改它们。需要诊断时使用：
 
 ```bash
-npx sdd agents sync --agents all --register-codex
+npx sdd status DLV-001
+npx sdd inspect DLV-001
+npx sdd events DLV-001
+npx sdd verify DLV-001
 ```
 
-同步只更新 Team SDD 清单记录且未被修改的文件，并保留其他 MCP Server。若发现同名自定义内容或 `team-sdd` MCP 配置冲突，它会停止；先运行 `npx sdd doctor`，手工处理冲突，不要删除或覆盖用户已有配置。
+### 执行策略
 
-## 自定义项目配置
-
-配置位于 `.sdd/config.yaml`。可先查看和调整执行策略：
+项目配置位于 `.sdd/config.yaml`。执行策略决定 `next` 为当前 Agent 推荐内联执行还是子 Agent 执行：
 
 ```bash
 npx sdd config show
 npx sdd config set execution.strategy auto
-# 也可设为 inline 或 subagent
 ```
 
 | 策略 | 行为 |
 |---|---|
-| `auto` | Agent 支持 subagent 时使用它，否则内联执行。 |
-| `inline` | 始终在当前 Agent 会话执行。 |
-| `subagent` | 强制要求 subagent；当前 Agent 不支持时，`next` 会明确阻塞。 |
+| `auto` | Agent 支持 subagent 时使用子 Agent，否则在当前会话内执行。 |
+| `inline` | 始终在当前 Agent 会话内执行。 |
+| `subagent` | 强制要求子 Agent；当前 Agent 不支持时，`next` 会明确阻塞。 |
 
-也可手工在 `.sdd/config.yaml` 添加 `logical_skills`，只覆盖需要调整的一条路由。Provider 与 Skill 必须保持 PRD 定义的组合，不能指向任意外部技能；单个 `skill` 会自动归一化为 `skills`：
+### Logical Skills 与固定检查
+
+可选 `logical_skills` 只能在 PRD 规定的 Provider/Skill 组合内调整，不能接入任意外部命令或 Skill。以下示例把实现阶段限定为 TDD：
 
 ```yaml
 version: 1
@@ -150,41 +184,32 @@ checks:
   build: [npm, run, build]
 ```
 
-默认逻辑路由如下：
+默认路由为：
 
 | 逻辑阶段 | Provider / Skill |
 |---|---|
 | Requirement | `team-sdd / requirement` |
-| Design | `team-sdd / technical-design` |
+| Technical Design | `team-sdd / technical-design` |
 | Spec Split | `team-sdd / spec-split` |
 | Implementation Plan | `superpowers / writing-plans` |
 | Implementation | `superpowers / test-driven-development`、`subagent-driven-development` |
 | Verification | `superpowers / requesting-code-review`、`verification-before-completion` |
 
-`checks` 是 CI 可信基线，固定为 `npm test`、`npm run typecheck`、`npm run build`，不能通过项目配置改写。
+`checks` 是固定可信基线：`npm test`、`npm run typecheck`、`npm run build`。不能通过项目配置改成任意 Shell 命令。
 
-## 诊断与修复
+### 团队诊断、Git Hook 与 CI
 
 ```bash
-# 只读诊断（推荐先执行）
+# 只读诊断；有问题时先按结果修复
 npx sdd doctor
 
-# 仅修复 Doctor 明确列出的安全本地配置项
+# 仅修复 Doctor 明确列出的安全本地项
 npx sdd doctor --fix
 
-# 查看完整状态、事件和审批有效性
-npx sdd inspect DLV-001
-npx sdd events DLV-001
-
-# 仅预览可创建的派生目录；需要 --apply 才会写入
-npx sdd repair DLV-001 --dry-run
-npx sdd repair DLV-001 --apply
+# 正常 Delivery 校验、快速 Hook 校验、完整 CI 校验
+npx sdd verify DLV-001
+npx sdd verify --hook
+npx sdd verify --ci
 ```
 
-需要供脚本调用时，大多数诊断和读取命令支持 `--json`。业务 Gate 未通过时退出码为 `2`，参数或环境错误为 `1`。
-
-## 原生 Agent 集成
-
-通常只需运行初始化命令。下面路径用于确认是否已写入项目：Claude Code 位于 `.claude/commands/sdd/`，CodeBuddy 位于 `.codebuddy/commands/sdd/`，Codex 位于 `.agents/plugins/team-sdd/`。所有适配均使用 `node_modules/@zbp/sdd/dist/mcp-server.js`。
-
-源码仓库的适配维护与本地调试步骤见 [MAINTAINERS.md](./MAINTAINERS.md)。用户项目始终通过 `npx @zbp/sdd init --agents … --install` 安装适配。CodeBuddy **绝不能替换已有目标 `.mcp.json`**：安装器会保留所有现有 `mcpServers`，只合并 `team-sdd` 条目。
+Git Hook 只运行快速流程完整性校验；CI 先审计仓库、审批、事件和 Gate，再运行固定三项检查。Agent 适配或 MCP 配置有冲突时，先运行 `doctor` 和 `agents sync`；不要覆盖现有 `.mcp.json` 或用户自定义的同名命令。

@@ -99,15 +99,17 @@ describe('Team SDD project Agent templates', () => {
     expect(integrations).toContain('`../templates/`');
   });
 
-  it('documents separate intervention guides for CodeBuddy, Codex, and Claude Code', async () => {
+  it('documents three-chapter onboarding and Agent-specific short commands', async () => {
     const readme = await readFile('README.md', 'utf8');
 
-    expect(readme).toContain('### CodeBuddy：在桌面会话中介入');
-    expect(readme).toContain('### Codex：通过项目插件介入');
-    expect(readme).toContain('### Claude Code：通过项目命令介入');
+    expect(readme).toContain('## 1. 首次安装');
+    expect(readme).toContain('## 2. 完成第一个 Delivery');
+    expect(readme).toContain('## 3. Team SDD 工作流、治理与自定义');
     expect(readme).toContain('npx @zbp/sdd init --agents codebuddy --install');
     expect(readme).toContain('npx @zbp/sdd init --agents codex --install --register-codex');
     expect(readme).toContain('npx @zbp/sdd init --agents claude --install');
+    expect(readme).toContain('/sdd:new');
+    expect(readme).toContain('/sdd-new');
   });
 
   it('keeps maintenance instructions out of the user README', async () => {

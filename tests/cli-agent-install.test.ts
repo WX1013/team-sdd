@@ -56,6 +56,23 @@ describe('Agent installation CLI', () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ root }));
   });
 
+  it.each([
+    ['claude', ['claude'], false],
+    ['codebuddy', ['codebuddy'], false],
+    ['codex', ['codex'], true],
+  ] as const)('initializes %s through its dedicated first-install command', async (agent, agents, registersCodex) => {
+    const root = await createRoot();
+    const { dependencies, sync, install, register } = createDependencies();
+    const args = ['init', '--agents', agent, '--install', ...(registersCodex ? ['--register-codex'] : [])];
+
+    const result = await runCli(args, root, dependencies);
+
+    expect(result.exitCode).toBe(0);
+    expect(install).toHaveBeenCalledOnce();
+    expect(sync).toHaveBeenCalledWith({ root, agents });
+    expect(register).toHaveBeenCalledTimes(registersCodex ? 1 : 0);
+  });
+
   it('installs the current published package version by default', async () => {
     const root = await createRoot();
     const install = vi.fn(async () => undefined);

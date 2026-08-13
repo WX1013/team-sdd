@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,21 +21,42 @@ afterEach(async () => {
 });
 
 describe('project npm installation', () => {
-  it('installs the exact package only in a Node project', async () => {
+  it('preserves an existing Node project manifest while installing the exact package', async () => {
     const root = await createRoot();
     const calls: unknown[] = [];
-    await writeFile(join(root, 'package.json'), '{}');
+    const manifest = '{"name":"backend"}\n';
+    await writeFile(join(root, 'package.json'), manifest);
 
     await installCurrentPackage({ root, packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture(calls) });
 
+    await expect(readFile(join(root, 'package.json'), 'utf8')).resolves.toBe(manifest);
     expect(calls).toEqual([
       ['npm', ['install', '--save-dev', '--save-exact', '@zbp/sdd@0.1.0'], { cwd: root }],
     ]);
   });
 
-  it('refuses to install when the project package manifest is missing', async () => {
+  it('creates a minimal private package manifest before installing in a non-Node project', async () => {
+    const root = await createRoot();
+    const calls: unknown[] = [];
+
+    await installCurrentPackage({ root, packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture(calls) });
+
+    await expect(readFile(join(root, 'package.json'), 'utf8')).resolves.toBe('{\n  "private": true\n}\n');
+    expect(calls).toEqual([
+      ['npm', ['install', '--save-dev', '--save-exact', '@zbp/sdd@0.1.0'], { cwd: root }],
+    ]);
+  });
+
+  it('refuses unsafe package manifest paths without invoking npm', async () => {
+    const root = await createRoot();
+    const calls: unknown[] = [];
+    await writeFile(join(root, 'target.json'), '{}');
+    await symlink(join(root, 'target.json'), join(root, 'package.json'));
+
     await expect(installCurrentPackage({
-      root: await createRoot(), packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture([]),
+      root, packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture(calls),
     })).rejects.toMatchObject({ code: 'NPM_PROJECT_PACKAGE_MISSING' });
+    expect(calls).toEqual([]);
+    await expect(lstat(join(root, 'package.json'))).resolves.toMatchObject({ isSymbolicLink: expect.any(Function) });
   });
 });
