@@ -12,6 +12,7 @@ import { planProgress } from './runtime/plan-progress.js';
 import { getSkillDefinition } from './skills/registry.js';
 import { createSddService } from './workflow/service.js';
 import { createProjectAgentInstaller, installCurrentPackage, parseAgentSelection, registerCodexProjectMarketplace, type ProjectAgentInstaller } from './agents/index.js';
+import { packageManifest as currentPackageManifest } from './package-info.js';
 
 export type CliResult = { exitCode: number; stdout: string; stderr: string };
 export type CliDependencies = {
@@ -90,7 +91,7 @@ export async function runCli(args: string[], root = process.cwd(), dependencies:
   const service = createSddService({ root });
   const agentContextService = createAgentContextService(service);
   const projectAgentInstaller = dependencies.projectAgentInstaller ?? createProjectAgentInstaller();
-  const packageManifest = dependencies.packageManifest ?? { name: '@zbp/sdd', version: '0.1.1' };
+  const packageManifest = dependencies.packageManifest ?? currentPackageManifest;
   const program = new Command();
   program.name('sdd').exitOverride().configureOutput({
     writeOut: (value) => { stdout += value; },

@@ -76,7 +76,33 @@ describe('project Agent installer', () => {
 
     expect(result.installed).toContain('.agents/plugins/team-sdd/.codex-plugin/plugin.json');
     expect(marketplace.plugins).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'team-sdd', source: './plugins/team-sdd' }),
+      expect.objectContaining({
+        name: 'team-sdd',
+        source: { source: 'local', path: './.agents/plugins/team-sdd' },
+        policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' },
+        category: 'Productivity',
+      }),
+    ]));
+  });
+
+  it('migrates only the previous Team SDD marketplace entry to the current Codex layout', async () => {
+    const root = await createRoot();
+    const installer = createProjectAgentInstaller();
+    await installer.sync({ root, agents: ['codex'] });
+    await writeFile(join(root, '.agents/plugins/marketplace.json'), `${JSON.stringify({
+      name: 'team-sdd-project',
+      plugins: [{
+        name: 'team-sdd',
+        source: './plugins/team-sdd',
+        description: 'Project-local Team SDD workflow commands.',
+        version: '0.1.1',
+      }],
+    }, null, 2)}\n`);
+
+    await expect(installer.sync({ root, agents: ['codex'] })).resolves.toEqual(expect.objectContaining({ warnings: [] }));
+    const marketplace = JSON.parse(await readFile(join(root, '.agents/plugins/marketplace.json'), 'utf8'));
+    expect(marketplace.plugins).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: { source: 'local', path: './.agents/plugins/team-sdd' } }),
     ]));
   });
 });

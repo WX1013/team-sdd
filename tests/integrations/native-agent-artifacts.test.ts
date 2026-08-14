@@ -34,7 +34,8 @@ describe('Team SDD project Agent templates', () => {
 
     expect(text).toContain('mcp__team-sdd__sdd_get_context');
     expect(text).toContain('mcp__team-sdd__sdd_submit_artifact');
-    expect(text).not.toMatch(/(?:write|append).*?(?:delivery\.yaml|events?)/i);
+    expect(text).toContain('Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.');
+    expect(text).not.toMatch(/\b(?:Write|Append)\s+(?:to\s+)?(?:the\s+)?(?:\.sdd|Delivery metadata|Event Log)/);
   });
 
   it.each(Object.entries(codeBuddyTools))(

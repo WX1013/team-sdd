@@ -1,11 +1,20 @@
 {
   "name": "team-sdd-project",
+  "interface": {
+    "displayName": "Team SDD Project"
+  },
   "plugins": [
     {
       "name": "team-sdd",
-      "source": "./plugins/team-sdd",
-      "description": "Project-local Team SDD workflow commands.",
-      "version": "0.1.1"
+      "source": {
+        "source": "local",
+        "path": "./.agents/plugins/team-sdd"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
     }
   ]
 }

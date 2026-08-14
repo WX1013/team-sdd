@@ -32,7 +32,7 @@ describe('Codex project marketplace registration', () => {
     await registerCodexProjectMarketplace({ root, runProcess: capture(calls) });
 
     expect(calls).toEqual([
-      ['codex', ['plugin', 'marketplace', 'add', join(root, '.agents')], { cwd: root }],
+      ['codex', ['plugin', 'marketplace', 'add', root], { cwd: root }],
       ['codex', ['plugin', 'add', 'team-sdd@team-sdd-project'], { cwd: root }],
     ]);
   });

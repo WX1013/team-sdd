@@ -110,6 +110,15 @@ function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function isLegacyTeamSddMarketplacePlugin(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const plugin = value as Record<string, unknown>;
+  return plugin.name === 'team-sdd'
+    && plugin.source === './plugins/team-sdd'
+    && plugin.description === 'Project-local Team SDD workflow commands.'
+    && (plugin.version === '0.1.0' || plugin.version === '0.1.1');
+}
+
 function outputFiles(templateRoot: string, agents: AgentSelection): ManagedFile[] {
   const actions = ['new', 'status', 'next', 'approve', 'doctor'] as const;
   const files: ManagedFile[] = [];
@@ -221,7 +230,13 @@ export function createProjectAgentInstaller(input: { templateRoot?: string } = {
         if (!Array.isArray(marketplace.plugins)) throw new DomainError('CODEX_MARKETPLACE_INVALID', 'Codex marketplace plugins must be an array.');
         const matches = marketplace.plugins.filter((plugin) => typeof plugin === 'object' && plugin !== null && (plugin as { name?: unknown }).name === 'team-sdd');
         if (matches.length > 0 && !sameJson(matches[0], desiredPlugin)) {
-          throw new DomainError('CODEX_MARKETPLACE_CONFLICT', 'Codex marketplace already defines a different team-sdd plugin.');
+          if (!isLegacyTeamSddMarketplacePlugin(matches[0])) {
+            throw new DomainError('CODEX_MARKETPLACE_CONFLICT', 'Codex marketplace already defines a different team-sdd plugin.');
+          }
+          marketplaceContent = `${JSON.stringify({
+            ...marketplace,
+            plugins: marketplace.plugins.map((plugin) => plugin === matches[0] ? desiredPlugin : plugin),
+          }, null, 2)}\n`;
         }
         if (matches.length === 0) marketplaceContent = `${JSON.stringify({ ...marketplace, plugins: [...marketplace.plugins, desiredPlugin] }, null, 2)}\n`;
       }

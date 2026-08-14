@@ -24,7 +24,7 @@ export async function registerCodexProjectMarketplace(input: {
   }
   try {
     const invoke = input.runProcess ?? runProcess;
-    await invoke('codex', ['plugin', 'marketplace', 'add', join(input.root, '.agents')], { cwd: input.root });
+    await invoke('codex', ['plugin', 'marketplace', 'add', input.root], { cwd: input.root });
     await invoke('codex', ['plugin', 'add', 'team-sdd@team-sdd-project'], { cwd: input.root });
   } catch (error) {
     throw new DomainError('CODEX_REGISTRATION_FAILED', `Unable to register the project-local Codex plugin: ${error instanceof Error ? error.message : String(error)}`);

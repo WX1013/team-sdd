@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runCli, type CliDependencies } from '../src/cli.js';
+import { packageManifest } from '../src/package-info.js';
 
 const roots: string[] = [];
 
@@ -25,7 +26,7 @@ function createDependencies(): { dependencies: CliDependencies; sync: ReturnType
       projectAgentInstaller: { sync, inspect: vi.fn(async () => []) },
       installCurrentPackage: install,
       registerCodexProjectMarketplace: register,
-      packageManifest: { name: '@zbp/sdd', version: '0.1.0' },
+      packageManifest: { name: '@zbp/sdd', version: '0.1.2' },
     },
     sync,
     install,
@@ -51,7 +52,7 @@ describe('Agent installation CLI', () => {
     const result = await runCli(['init', '--agents', 'claude,codex', '--install', '--register-codex'], root, dependencies);
 
     expect(result.exitCode).toBe(0);
-    expect(install).toHaveBeenCalledWith(expect.objectContaining({ root, packageName: '@zbp/sdd', version: '0.1.0' }));
+    expect(install).toHaveBeenCalledWith(expect.objectContaining({ root, packageName: '@zbp/sdd', version: '0.1.2' }));
     expect(sync).toHaveBeenCalledWith({ root, agents: ['claude', 'codex'] });
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ root }));
   });
@@ -83,7 +84,7 @@ describe('Agent installation CLI', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(install).toHaveBeenCalledWith(expect.objectContaining({ root, packageName: '@zbp/sdd', version: '0.1.1' }));
+    expect(install).toHaveBeenCalledWith(expect.objectContaining({ root, packageName: packageManifest.name, version: packageManifest.version }));
   });
 
   it('rejects invalid selection and Codex registration without Codex', async () => {

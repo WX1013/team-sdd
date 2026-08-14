@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { packageVersion } from '../package-info.js';
 import {
   approveInputSchema,
   assessDesignInputSchema,
@@ -18,7 +19,7 @@ function jsonResult(value: unknown) {
 }
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: 'team-sdd', version: '0.1.1' });
+  const server = new McpServer({ name: 'team-sdd', version: packageVersion });
   const tools = createToolHandlers();
 
   server.registerTool('sdd_new', {

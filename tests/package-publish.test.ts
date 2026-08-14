@@ -43,6 +43,8 @@ describe('Nexus publish package', () => {
       'integrations/README.md',
       'plugins/team-sdd/.mcp.json',
     ]));
+    expect(paths).not.toContain('dist/src/cli.js');
+    expect(paths).not.toContain('dist/package.json');
   });
 
   it('documents three-chapter onboarding for any project and every supported Agent', async () => {

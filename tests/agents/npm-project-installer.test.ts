@@ -27,11 +27,11 @@ describe('project npm installation', () => {
     const manifest = '{"name":"backend"}\n';
     await writeFile(join(root, 'package.json'), manifest);
 
-    await installCurrentPackage({ root, packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture(calls) });
+    await installCurrentPackage({ root, packageName: '@zbp/sdd', version: '0.1.2', runProcess: capture(calls) });
 
     await expect(readFile(join(root, 'package.json'), 'utf8')).resolves.toBe(manifest);
     expect(calls).toEqual([
-      ['npm', ['install', '--save-dev', '--save-exact', '@zbp/sdd@0.1.0'], { cwd: root }],
+      ['npm', ['install', '--save-dev', '--save-exact', '@zbp/sdd@0.1.2'], { cwd: root }],
     ]);
   });
 
@@ -39,11 +39,11 @@ describe('project npm installation', () => {
     const root = await createRoot();
     const calls: unknown[] = [];
 
-    await installCurrentPackage({ root, packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture(calls) });
+    await installCurrentPackage({ root, packageName: '@zbp/sdd', version: '0.1.2', runProcess: capture(calls) });
 
     await expect(readFile(join(root, 'package.json'), 'utf8')).resolves.toBe('{\n  "private": true\n}\n');
     expect(calls).toEqual([
-      ['npm', ['install', '--save-dev', '--save-exact', '@zbp/sdd@0.1.0'], { cwd: root }],
+      ['npm', ['install', '--save-dev', '--save-exact', '@zbp/sdd@0.1.2'], { cwd: root }],
     ]);
   });
 
@@ -54,7 +54,7 @@ describe('project npm installation', () => {
     await symlink(join(root, 'target.json'), join(root, 'package.json'));
 
     await expect(installCurrentPackage({
-      root, packageName: '@zbp/sdd', version: '0.1.0', runProcess: capture(calls),
+      root, packageName: '@zbp/sdd', version: '0.1.2', runProcess: capture(calls),
     })).rejects.toMatchObject({ code: 'NPM_PROJECT_PACKAGE_MISSING' });
     expect(calls).toEqual([]);
     await expect(lstat(join(root, 'package.json'))).resolves.toMatchObject({ isSymbolicLink: expect.any(Function) });
