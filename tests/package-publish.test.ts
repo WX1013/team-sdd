@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
@@ -7,7 +9,7 @@ const execFileAsync = promisify(execFile);
 
 async function runNpmPackDryRun(): Promise<{ files: { path: string }[] }> {
   const { stdout } = await execFileAsync('npm', [
-    '--cache', '/private/tmp/zbp-sdd-npm-cache', 'pack', '--dry-run', '--json',
+    '--cache', join(tmpdir(), 'zbp-sdd-npm-cache'), 'pack', '--dry-run', '--json',
   ]);
   return JSON.parse(stdout)[0] as { files: { path: string }[] };
 }
