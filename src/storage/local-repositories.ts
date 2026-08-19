@@ -52,6 +52,19 @@ function deliveryPath(root: string, id: DeliveryId): string {
 export class LocalDeliveryRepository implements DeliveryRepository {
   constructor(private readonly root: string) {}
 
+  async create(delivery: DeliveryMetadata): Promise<void> {
+    const path = deliveryPath(this.root, delivery.id);
+    await mkdir(join(path, '..'), { recursive: true });
+    try {
+      await writeFile(path, stringify(delivery), { encoding: 'utf8', flag: 'wx' });
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new DomainError('DELIVERY_ALREADY_EXISTS', `Delivery already exists: ${delivery.id}`);
+      }
+      throw error;
+    }
+  }
+
   async read(id: DeliveryId): Promise<DeliveryMetadata> {
     let raw: unknown;
     try {

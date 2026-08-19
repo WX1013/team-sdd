@@ -2,6 +2,7 @@ import type { DeliveryId, DeliveryMetadata, WorkflowEvent } from '../domain/type
 
 export interface DeliveryRepository {
   read(id: DeliveryId): Promise<DeliveryMetadata>;
+  create(delivery: DeliveryMetadata): Promise<void>;
   listIds(): Promise<DeliveryId[]>;
   save(delivery: DeliveryMetadata): Promise<void>;
 }

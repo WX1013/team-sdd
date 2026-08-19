@@ -68,6 +68,18 @@ describe('Requirement and Design Gates', () => {
     });
   });
 
+  it('blocks a pending English question', async () => {
+    const root = await createRoot();
+    const path = requirementPath(root, 'DLV-001');
+    await mkdir(join(path, '..'), { recursive: true });
+    await writeFile(path, '# Requirement\n\n## Source\n\nPRD\n\n## Scope\n\nRecords\n\n## Questions\n\nStatus: pending\n\n## Baseline\n\nApproved');
+
+    await expect(evaluateRequirementGate({ delivery: application, artifacts: new ArtifactStore(root) })).resolves.toMatchObject({
+      ok: false,
+      findings: expect.arrayContaining([expect.objectContaining({ code: 'REQUIREMENT_BLOCKING_QUESTION' })]),
+    });
+  });
+
   it('skips Design only for a feature change with an explicit false decision', async () => {
     const feature: DeliveryMetadata = {
       ...application,

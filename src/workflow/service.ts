@@ -8,7 +8,7 @@ import { DomainError } from '../domain/errors.js';
 import { transitionDelivery } from '../domain/transitions.js';
 import { designImpacts, parseDeliveryId, parseSpecId, type ApprovalArtifact, type DeliveryId, type DeliveryMetadata, type DeliveryType, type DesignDecision, type DesignImpact, type SpecId, type SpecSummary, type WorkflowEvent } from '../domain/types.js';
 import { evaluateDesignGate, evaluateRequirementGate } from '../gates/requirements.js';
-import { evaluateCheckGate, evaluatePlanGate, evaluateSpecGate } from '../gates/specs.js';
+import { evaluateCheckGate, evaluateDeliveryCheckGate, evaluatePlanGate, evaluateSpecGate } from '../gates/specs.js';
 import type { GateFinding, GateResult } from '../gates/types.js';
 import { inspectGitHook, installGitHook } from '../integrations/git-hook.js';
 import { agentNames, createProjectAgentInstaller, type AgentName, type AgentSelection } from '../agents/index.js';
@@ -24,7 +24,6 @@ export type CreateDeliveryInput = {
   id: string;
   title: string;
   type: DeliveryType;
-  design?: { required: boolean; reason: string };
 };
 export type AssessDesignInput = DeliveryRef & { impacts: readonly DesignImpact[]; reason: string };
 export type DecideDesignInput = DeliveryRef & { required: boolean; reason: string; approvedBy: string };
@@ -134,6 +133,7 @@ export function createSddService({ root, nodeVersion = process.versions.node }: 
     const activeSpec = delivery.specs.find((spec) => spec.state !== 'DONE');
     if (activity === 'PLAN' && activeSpec) return { activity, ...(await evaluatePlanGate({ delivery, specId: activeSpec.id, artifacts })) };
     if (activity === 'CHECK' && activeSpec) return { activity, ...(await evaluateCheckGate({ delivery, specId: activeSpec.id, artifacts })) };
+    if (activity === 'CHECK') return { activity, ...(await evaluateDeliveryCheckGate({ delivery, artifacts })) };
     if (activity === 'DONE') return { activity, ok: true };
     return {
       activity,
@@ -238,11 +238,10 @@ function errorMessage(error: unknown): string {
         title: input.title.trim(),
         type: input.type,
         state: 'REQUIREMENT',
-        ...(input.design ? { design: input.design } : {}),
         approvals: {},
         specs: [],
       };
-      await deliveries.save(delivery);
+      await deliveries.create(delivery);
       await events.append({ type: 'delivery.created', deliveryId: id, occurredAt: new Date().toISOString() });
       return { ok: true };
     },
@@ -370,16 +369,10 @@ function errorMessage(error: unknown): string {
       if (input.kind === 'check') {
         if (!input.specId) {
           if (delivery.state !== 'CHECK') throw new DomainError('DELIVERY_CHECK_NOT_ALLOWED', 'Delivery Check can only be submitted while Delivery state is CHECK');
+          const gate = await evaluateDeliveryCheckGate({ delivery, artifacts, evidence: input.evidence });
+          if (!gate.ok) return { accepted: false, advanced: false, deliveryState: delivery.state, findings: gate.findings };
           const hash = await artifacts.hash({ deliveryId: delivery.id, kind: 'check' });
           await events.append({ type: 'artifact.submitted', deliveryId: delivery.id, occurredAt: new Date().toISOString(), metadata: { kind: input.kind, hash } });
-          const markdown = await artifacts.read({ deliveryId: delivery.id, kind: 'check' });
-          const evidence = input.evidence;
-          const findings: GateFinding[] = [];
-          if (!markdown.includes('Requirement Coverage: 100%')) findings.push({ code: 'DELIVERY_COVERAGE_MISSING', message: 'Delivery Check must record 100% Requirement Coverage.', artifact: 'check.md', nextStep: 'Record Requirement Coverage: 100% after verification.' });
-          if (!evidence?.integration?.length) findings.push({ code: 'DELIVERY_INTEGRATION_EVIDENCE_MISSING', message: 'Delivery Check requires integration evidence.', artifact: 'check.md', nextStep: 'Provide integration verification evidence.' });
-          if (!evidence?.regression?.length) findings.push({ code: 'DELIVERY_REGRESSION_EVIDENCE_MISSING', message: 'Delivery Check requires regression evidence.', artifact: 'check.md', nextStep: 'Provide regression verification evidence.' });
-          if (!evidence?.deliveryAcceptance?.length) findings.push({ code: 'DELIVERY_ACCEPTANCE_EVIDENCE_MISSING', message: 'Delivery Check requires delivery acceptance evidence.', artifact: 'check.md', nextStep: 'Provide delivery acceptance evidence.' });
-          if (findings.length > 0) return { accepted: false, advanced: false, deliveryState: delivery.state, findings };
           const advanced = await advanceDelivery(delivery, 'DONE');
           await events.append({ type: 'delivery.completed', deliveryId: advanced.id, occurredAt: new Date().toISOString() });
           return { accepted: true, advanced: true, deliveryState: advanced.state, findings: [] };

@@ -149,15 +149,8 @@ export async function runCli(args: string[], root = process.cwd(), dependencies:
   program.command('new <deliveryId>')
     .requiredOption('--title <title>')
     .requiredOption('--type <type>')
-    .option('--design-required <reason>')
-    .option('--design-not-required <reason>')
     .action(async (deliveryId, options) => {
-      const design = options.designRequired
-        ? { required: true, reason: options.designRequired }
-        : options.designNotRequired
-          ? { required: false, reason: options.designNotRequired }
-          : undefined;
-      await service.createDelivery({ id: deliveryId, title: options.title, type: options.type, design });
+      await service.createDelivery({ id: deliveryId, title: options.title, type: options.type });
       stdout += `Created ${deliveryId}.\n`;
     });
 

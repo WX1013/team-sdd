@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -9,7 +9,7 @@ const roots: string[] = [];
 const validSpec = '# Spec\n\n## Goal\n\nRecords\n\n## Requirement Sources\n\nBaseline\n\n## Scope\n\nRecords\n\n## Out of Scope\n\nNone\n\n## Acceptance Criteria\n\n- AC-001 Create record\n\n## Dependencies\n\nNone\n\n## Constraints\n\nNone\n\n## Expected Impact\n\nLocal';
 const validDesign = '# Design\n\n## System Boundary\n\nLocal service\n\n## Overall Architecture\n\nSingle module\n\n## Module Design\n\nWorkflow service\n\n## Data Model\n\nDelivery metadata\n\n## API\n\nCLI\n\n## Core Flow\n\nApproved submissions\n\n## Permissions\n\nHuman approvals\n\n## Error Handling\n\nStructured findings\n\n## Performance\n\nLocal files\n\n## Security\n\nValidated paths\n\n## Observability\n\nEvent log\n\n## Deployment\n\nPackage install\n\n## Compatibility / Migration\n\nNone\n\n## Test Strategy\n\nIntegration tests\n\n## Technical Risks\n\nArtifact drift\n\n## Requirement Coverage\n\nNo stable requirement identifiers are present.';
 const validPlan = '# Plan\n\n### Task 1: Create record\n\nCovers AC-001\n\n#### Test\n\n- [ ] unit test\n\n#### Implementation\n\n- [ ] create record\n\n#### Verification\n\n- [ ] npm test';
-const validCheck = '# Check\n\n## Automated Verification\n\nTests PASS\nBuild PASS\n\n## Acceptance Criteria\n\n- AC-001 PASS\n\n## Code Review\n\nCritical Issues: 0\nImportant Issues: 0\n\n## Fresh Verification Evidence\n\n- npm test · PASS';
+const validCheck = '# Check\n\n## Automated Verification\n\nTests PASS\nBuild PASS\nStatic Checks PASS\n\n## Acceptance Criteria\n\n- AC-001 PASS\n\n## Code Review\n\nCritical Issues: 0\nImportant Issues: 0\n\n## Fresh Verification Evidence\n\nCommand: npm test\nOccurred At: 2026-08-19T00:00:00Z\nResult: PASS';
 
 async function createRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'team-sdd-execution-'));
@@ -18,7 +18,8 @@ async function createRoot(): Promise<string> {
 }
 
 async function setupExecution(service: ReturnType<typeof createSddService>, root: string): Promise<void> {
-  await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'FEATURE_CHANGE', design: { required: false, reason: 'Small change' } });
+  await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'FEATURE_CHANGE' });
+  await service.decideDesign({ deliveryId: 'DLV-001', required: false, reason: 'Small change', approvedBy: 'reviewer' });
   const requirement = requirementPath(root, 'DLV-001');
   await mkdir(join(requirement, '..'), { recursive: true });
   await writeFile(requirement, '# Requirement\n\n## Source\n\nPRD\n\n## Scope\n\nRecords\n\n## Baseline\n\nApproved');
@@ -48,7 +49,7 @@ describe('Spec execution submission', () => {
     await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', specId: 'SP-001', evidence: { tests: ['unit'], build: 'npm run build', staticChecks: ['npm run typecheck'] } })).resolves.toMatchObject({ advanced: true, specState: 'DONE', deliveryState: 'CHECK' });
 
     await writeFile(join(root, 'sdd/deliveries/DLV-001/check.md'), '# Delivery Check\n\nRequirement Coverage: 100%');
-    await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', evidence: { integration: ['integration'], regression: ['regression'], deliveryAcceptance: ['acceptance'] } })).resolves.toMatchObject({ advanced: true, deliveryState: 'DONE' });
+       await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', evidence: { integration: ['integration PASS'], regression: ['regression PASS'], deliveryAcceptance: ['acceptance PASS'] } })).resolves.toMatchObject({ advanced: true, deliveryState: 'DONE' });
   });
 
   it('returns a failed Spec Check from CODE to CODE with actionable evidence findings', async () => {
@@ -71,6 +72,25 @@ describe('Spec execution submission', () => {
     expect(failedCheck).toMatchObject({ type: 'check.failed', metadata: { specId: 'SP-001' } });
     expect(failedCheck?.metadata).not.toHaveProperty('previousState');
     expect(failedCheck?.metadata).not.toHaveProperty('nextState');
+  });
+
+  it('rejects Delivery Check without PASS evidence or completed Spec Packs', async () => {
+    const root = await createRoot();
+    const service = createSddService({ root });
+    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'APPLICATION_INIT' });
+    const deliveries = join(root, 'sdd/deliveries/DLV-001');
+    await mkdir(join(deliveries, 'specs/SP-001'), { recursive: true });
+    await writeFile(join(deliveries, 'check.md'), '# Delivery Check\n\nRequirement Coverage: 100%');
+    const deliveryPath = join(deliveries, 'delivery.yaml');
+    await writeFile(deliveryPath, (await readFile(deliveryPath, 'utf8')).replace('state: REQUIREMENT', 'state: CHECK').replace('specs: []', 'specs:\n  - id: SP-001\n    title: Records\n    state: READY\n    dependencies: []\n    acceptanceCriteria: [AC-001]'));
+
+    await expect(service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', evidence: { integration: ['integration'], regression: ['regression'], deliveryAcceptance: ['acceptance'] } })).resolves.toMatchObject({
+      accepted: false,
+      findings: expect.arrayContaining([
+        expect.objectContaining({ code: 'DELIVERY_SPECS_NOT_DONE' }),
+        expect.objectContaining({ code: 'DELIVERY_INTEGRATION_EVIDENCE_MISSING' }),
+      ]),
+    });
   });
 
   it('keeps a completed Delivery event history auditable after successful Spec and Delivery Checks', async () => {
@@ -104,7 +124,7 @@ describe('Spec execution submission', () => {
     await writeFile(join(directory, 'check.md'), validCheck);
     await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', specId: 'SP-001', evidence: { tests: ['unit'], build: 'npm run build', staticChecks: ['npm run typecheck'] } });
     await writeFile(join(root, 'sdd/deliveries/DLV-001/check.md'), '# Delivery Check\n\nRequirement Coverage: 100%');
-    await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', evidence: { integration: ['integration'], regression: ['regression'], deliveryAcceptance: ['acceptance'] } });
+    await service.submitArtifact({ deliveryId: 'DLV-001', kind: 'check', evidence: { integration: ['integration PASS'], regression: ['regression PASS'], deliveryAcceptance: ['acceptance PASS'] } });
 
     const events = await service.events({ deliveryId: 'DLV-001' });
     const successfulSpecTransitions = events.filter((event) => event.type === 'spec.transitioned' && event.metadata?.specId === 'SP-001' && ['CODE', 'CHECK'].includes(String(event.metadata?.previousState)));

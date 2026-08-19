@@ -89,6 +89,28 @@ describe('Spec Gates', () => {
     ]) });
   });
 
+  it('reports a missing Spec artifact without throwing while checking approval', async () => {
+    const root = await createRoot();
+    const deliveryWithApproval: DeliveryMetadata = {
+      ...delivery,
+      approvals: {
+        spec: {
+          artifact: 'spec',
+          hash: `sha256:${'0'.repeat(64)}`,
+          actorType: 'human',
+          approvedBy: 'reviewer',
+          approvedAt: new Date().toISOString(),
+        },
+      },
+    };
+
+    const result = await evaluateSpecGate({ delivery: deliveryWithApproval, artifacts: new ArtifactStore(root) });
+
+    expect(result).toMatchObject({ ok: false, findings: expect.arrayContaining([
+      expect.objectContaining({ code: 'SPEC_ARTIFACT_MISSING' }),
+    ]) });
+  });
+
   it('rejects Check evidence without each AC PASS, clean review, and fresh verification evidence', async () => {
     const root = await createRoot();
     await writeSpec(root, 'SP-001', requiredSpec('None'));

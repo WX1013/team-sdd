@@ -5,6 +5,11 @@ import { coverageFindingIds, requirementIds } from './coverage.js';
 
 type SpecGateInput = { delivery: DeliveryMetadata; artifacts: ArtifactStore };
 type PackGateInput = SpecGateInput & { specId: SpecId };
+export type DeliveryCheckEvidence = {
+  integration?: string[];
+  regression?: string[];
+  deliveryAcceptance?: string[];
+};
 
 const specSections = [
   'Goal', 'Requirement Sources', 'Scope', 'Out of Scope', 'Acceptance Criteria',
@@ -122,7 +127,11 @@ export async function evaluateSpecGate(input: SpecGateInput): Promise<GateResult
   }
 
   const approval = input.delivery.approvals.spec;
-  if (!approval || approval.hash !== await input.artifacts.hashSpecSet(input.delivery)) {
+  let hasCurrentApproval = false;
+  if (approval && findings.every(({ code }) => code !== 'SPEC_ARTIFACT_MISSING')) {
+    hasCurrentApproval = approval.hash === await input.artifacts.hashSpecSet(input.delivery);
+  }
+  if (!hasCurrentApproval) {
     findings.push(finding('SPEC_APPROVAL_MISSING', 'Spec Pack set has no current human approval.', 'specs/', 'Request a human approval for the current Spec Pack set.'));
   }
 
@@ -193,7 +202,7 @@ export async function evaluateCheckGate(input: PackGateInput): Promise<GateResul
   } catch {
     return { ok: false, findings: [finding('SPEC_ARTIFACT_MISSING', 'Spec artifact is missing.', `${input.specId}/spec.md`, 'Create spec.md before submitting Check.')] };
   }
-  const requiredEvidence = ['Tests PASS', 'Build PASS'];
+  const requiredEvidence = ['Tests PASS', 'Build PASS', 'Static Checks PASS'];
   const findings = requiredEvidence
     .filter((evidence) => !check.includes(evidence))
     .map((evidence) => finding('CHECK_EVIDENCE_MISSING', `Check is missing evidence: ${evidence}.`, `${input.specId}/check.md`, `Record fresh ${evidence} evidence.`));
@@ -206,8 +215,43 @@ export async function evaluateCheckGate(input: PackGateInput): Promise<GateResul
   if (!/\bCritical Issues:\s*0\b/i.test(review) || !/\bImportant Issues:\s*0\b/i.test(review)) {
     findings.push(finding('CHECK_REVIEW_NOT_CLEAN', 'Check Code Review must record Critical Issues: 0 and Important Issues: 0.', `${input.specId}/check.md`, 'Resolve review findings and record zero Critical and Important issues.'));
   }
-  if (!section(check, 'Fresh Verification Evidence').trim()) {
+  const freshEvidence = section(check, 'Fresh Verification Evidence');
+  if (!/\bCommand\s*:/i.test(freshEvidence) || !/\bOccurred At\s*:/i.test(freshEvidence) || !/\bResult\s*:\s*PASS\b/i.test(freshEvidence)) {
     findings.push(finding('CHECK_FRESH_EVIDENCE_MISSING', 'Check requires fresh verification evidence.', `${input.specId}/check.md`, 'Record command, time, and result in Fresh Verification Evidence.'));
   }
+  return findings.length === 0 ? { ok: true } : { ok: false, findings };
+}
+
+export async function evaluateDeliveryCheckGate(input: SpecGateInput & { evidence?: DeliveryCheckEvidence }): Promise<GateResult> {
+  const findings: GateFinding[] = [];
+  let check = '';
+  try {
+    check = await input.artifacts.read({ deliveryId: input.delivery.id, kind: 'check' });
+  } catch {
+    findings.push(finding('DELIVERY_CHECK_ARTIFACT_MISSING', 'Delivery Check artifact is missing.', 'check.md', 'Create check.md with Delivery-level verification evidence.'));
+  }
+
+  if (input.delivery.specs.some((spec) => spec.state !== 'DONE')) {
+    findings.push(finding('DELIVERY_SPECS_NOT_DONE', 'All Spec Packs must be DONE before Delivery Check.', 'delivery.yaml', 'Complete every Spec Pack before submitting Delivery Check.'));
+  }
+  if (!check.includes('Requirement Coverage: 100%')) {
+    findings.push(finding('DELIVERY_COVERAGE_MISSING', 'Delivery Check must record 100% Requirement Coverage.', 'check.md', 'Record Requirement Coverage: 100% after verification.'));
+  }
+
+  const evidence = input.evidence;
+  for (const [key, code, label] of [
+    ['integration', 'DELIVERY_INTEGRATION_EVIDENCE_MISSING', 'integration'],
+    ['regression', 'DELIVERY_REGRESSION_EVIDENCE_MISSING', 'regression'],
+    ['deliveryAcceptance', 'DELIVERY_ACCEPTANCE_EVIDENCE_MISSING', 'delivery acceptance'],
+  ] as const) {
+    const values = evidence?.[key];
+    const markdownEvidence = key === 'deliveryAcceptance'
+      ? /Delivery\s+(?:Level\s+)?Acceptance[\s\S]*?\bPASS\b/i.test(check)
+      : new RegExp(`${label}[\\s\\S]*?\\bPASS\\b`, 'i').test(check);
+    if (!values?.some((value) => /\bPASS\b/i.test(value)) && !markdownEvidence) {
+      findings.push(finding(code, `Delivery Check requires ${label} PASS evidence.`, 'check.md', `Provide ${label} verification evidence with PASS result.`));
+    }
+  }
+
   return findings.length === 0 ? { ok: true } : { ok: false, findings };
 }

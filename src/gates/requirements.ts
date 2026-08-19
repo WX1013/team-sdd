@@ -60,7 +60,7 @@ export async function evaluateRequirementGate(input: GateInput): Promise<GateRes
     for (const error of validateRequiredSections(markdown, [])) {
       findings.push(...findingsFromSections([error], 'requirement.md', 'REQUIREMENT'));
     }
-    if (/##\s+Questions[\s\S]*?Status:\s*unresolved/i.test(markdown) || /##\s+问题[\s\S]*?状态\s*[:：]\s*未解决/.test(markdown)) {
+    if (/##\s+(?:Questions|问题)[\s\S]*?(?:Status|状态)\s*[:：]\s*(?:unresolved|open|pending|blocked|未解决|待确认|阻塞|开放)/i.test(markdown)) {
       findings.push(finding('REQUIREMENT_BLOCKING_QUESTION', 'Requirement has unresolved blocking questions.', 'requirement.md', 'Resolve all blocking questions.'));
     }
   }

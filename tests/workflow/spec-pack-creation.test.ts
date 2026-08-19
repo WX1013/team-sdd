@@ -19,8 +19,8 @@ async function enterSpec(service: ReturnType<typeof createSddService>, root: str
     id: 'DLV-001',
     title: 'Records',
     type: 'FEATURE_CHANGE',
-    design: { required: false, reason: 'Adds one optional field.' },
   });
+  await service.decideDesign({ deliveryId: 'DLV-001', required: false, reason: 'Adds one optional field.', approvedBy: 'reviewer' });
   const path = requirementPath(root, 'DLV-001');
   await mkdir(join(path, '..'), { recursive: true });
   await writeFile(path, '# Requirement\n\n## Source\n\nPRD\n\n## Scope\n\nRecords\n\n## Baseline\n\nApproved scope');

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { ArtifactStore } from '../artifacts/artifact-store.js';
@@ -13,7 +14,7 @@ import type {
   WorkflowEvent,
 } from '../domain/types.js';
 import { evaluateDesignGate, evaluateRequirementGate } from '../gates/requirements.js';
-import { evaluateCheckGate, evaluatePlanGate, evaluateSpecGate } from '../gates/specs.js';
+import { evaluateCheckGate, evaluateDeliveryCheckGate, evaluatePlanGate, evaluateSpecGate } from '../gates/specs.js';
 import type { GateResult } from '../gates/types.js';
 import { resolveActivity } from '../runtime/next-context.js';
 import { LocalDeliveryRepository, LocalEventRepository } from '../storage/local-repositories.js';
@@ -21,6 +22,11 @@ import type { AuditFinding, AuditResult, VerifyMode } from './types.js';
 
 const deliveryStates = new Set<DeliveryState>(['REQUIREMENT', 'DESIGN', 'SPEC', 'EXECUTION', 'CHECK', 'DONE']);
 const specStates = new Set<SpecState>(['READY', 'PLAN', 'CODE', 'CHECK', 'DONE']);
+const knownEventTypes = new Set([
+  'delivery.created', 'delivery.transitioned', 'delivery.completed',
+  'design.decided', 'requirement.approved', 'design.approved', 'spec.approved',
+  'spec.created', 'spec.transitioned', 'artifact.submitted', 'check.failed',
+]);
 const execFileAsync = promisify(execFile);
 
 function finding(code: string, message: string, artifact: string, nextStep: string): AuditFinding {
@@ -47,11 +53,33 @@ function eventArtifact(delivery: DeliveryMetadata): string {
   return join('.sdd', 'events', `${delivery.id}.jsonl`);
 }
 
+function eventFieldError(event: WorkflowEvent): string | undefined {
+  const metadata = event.metadata;
+  const hasHash = typeof metadata?.hash === 'string' && /^sha256:[a-f0-9]{64}$/.test(metadata.hash);
+  if (event.type === 'design.decided' && (metadata?.actorType !== 'human' || typeof metadata.approvedBy !== 'string' || !metadata.approvedBy.trim() || typeof metadata.required !== 'boolean' || typeof metadata.reason !== 'string' || !metadata.reason.trim())) {
+    return 'design.decided requires human actor, approver, required, and reason metadata.';
+  }
+  if (event.type === 'spec.created' && (typeof metadata?.specId !== 'string' || !/^SP-[A-Za-z0-9][A-Za-z0-9_-]*$/.test(metadata.specId))) {
+    return 'spec.created requires a valid Spec Pack ID.';
+  }
+  if (event.type === 'artifact.submitted' && (typeof metadata?.kind !== 'string' || !['requirement', 'design', 'spec', 'plan', 'check'].includes(metadata.kind) || !hasHash || ((metadata.kind === 'spec' || metadata.kind === 'plan') && typeof metadata.specId !== 'string'))) {
+    return 'artifact.submitted requires a valid artifact kind, SHA-256 hash, and Spec Pack ID for Spec, Plan, or Check artifacts.';
+  }
+  if (['requirement.approved', 'design.approved', 'spec.approved'].includes(event.type) && (typeof metadata?.approvedBy !== 'string' || !metadata.approvedBy.trim() || !hasHash)) {
+    return `${event.type} requires an approver and SHA-256 hash.`;
+  }
+  if (event.type === 'check.failed' && (typeof metadata?.specId !== 'string' || !/^SP-[A-Za-z0-9][A-Za-z0-9_-]*$/.test(metadata.specId))) {
+    return 'check.failed requires a valid Spec Pack ID.';
+  }
+  return undefined;
+}
+
 function auditEvents(delivery: DeliveryMetadata, events: WorkflowEvent[]): AuditFinding[] {
   const findings: AuditFinding[] = [];
   const artifact = eventArtifact(delivery);
   let deliveryState: DeliveryState | undefined;
   let deliveryCreated = false;
+  let humanDesignDecision = false;
   const specHistory = new Map<SpecId, SpecState>();
 
   const deliveryHistoryFinding = (message: string) => findings.push(finding(
@@ -75,6 +103,22 @@ function auditEvents(delivery: DeliveryMetadata, events: WorkflowEvent[]): Audit
         artifact,
         `Change the event Delivery ID to ${delivery.id} or move the event to the matching log.`,
       ));
+    }
+
+    if (!knownEventTypes.has(event.type)) {
+      findings.push(finding(
+        'EVENT_TYPE_UNKNOWN',
+        `Event type ${event.type} is not supported by this workflow version.`,
+        artifact,
+        'Remove the unknown event or upgrade the workflow implementation that defines it.',
+      ));
+      continue;
+    }
+
+    const fieldError = eventFieldError(event);
+    if (fieldError) {
+      findings.push(finding('EVENT_FIELDS_INVALID', fieldError, artifact, 'Restore the required fields for this event type.'));
+      continue;
     }
 
     if (event.type === 'delivery.created') {
@@ -116,6 +160,16 @@ function auditEvents(delivery: DeliveryMetadata, events: WorkflowEvent[]): Audit
           artifact,
           'Replace the event with a legal Delivery transition.',
         ));
+      }
+      continue;
+    }
+
+    if (event.type === 'design.decided') {
+      const metadata = event.metadata;
+      if (typeof metadata?.approvedBy !== 'string' || !metadata.approvedBy.trim() || metadata.actorType !== 'human') {
+        findings.push(finding('EVENT_DESIGN_DECISION_INVALID', 'Design decision event must include a human actor and approver.', artifact, 'Record a human Design decision with approvedBy and actorType: human.'));
+      } else {
+        humanDesignDecision = true;
       }
       continue;
     }
@@ -191,6 +245,10 @@ function auditEvents(delivery: DeliveryMetadata, events: WorkflowEvent[]): Audit
     ));
   }
 
+  if (delivery.type === 'FEATURE_CHANGE' && delivery.design && !humanDesignDecision) {
+    findings.push(finding('DESIGN_DECISION_EVENT_MISSING', 'Feature Change metadata contains a Design decision without a corresponding human event.', artifact, 'Record the decision through the human Design decision command.'));
+  }
+
   for (const spec of delivery.specs) {
     const latestState = specHistory.get(spec.id);
     if (!latestState) {
@@ -205,6 +263,62 @@ function auditEvents(delivery: DeliveryMetadata, events: WorkflowEvent[]): Audit
     }
   }
 
+  return findings;
+}
+
+function auditMetadata(delivery: DeliveryMetadata): AuditFinding[] {
+  const findings: AuditFinding[] = [];
+  const artifact = join('sdd', 'deliveries', delivery.id, 'delivery.yaml');
+  const ids = new Set<string>();
+  for (const spec of delivery.specs) {
+    if (ids.has(spec.id)) {
+      findings.push(finding('DELIVERY_SPEC_ID_DUPLICATE', `Delivery metadata declares Spec Pack ${spec.id} more than once.`, artifact, 'Remove the duplicate Spec Pack entry.'));
+    }
+    ids.add(spec.id);
+  }
+  for (const spec of delivery.specs) {
+    for (const dependency of spec.dependencies) {
+      if (dependency === spec.id) {
+        findings.push(finding('DELIVERY_SPEC_SELF_DEPENDENCY', `Spec Pack ${spec.id} depends on itself.`, artifact, 'Remove the self dependency.'));
+      } else if (!ids.has(dependency)) {
+        findings.push(finding('DELIVERY_SPEC_DEPENDENCY_UNKNOWN', `Spec Pack ${spec.id} depends on unknown Spec Pack ${dependency}.`, artifact, 'Reference an existing Spec Pack or remove the dependency.'));
+      }
+    }
+  }
+  for (const artifactName of ['requirement', 'design', 'spec'] as const) {
+    const approval = delivery.approvals[artifactName];
+    if (approval && approval.artifact !== artifactName) {
+      findings.push(finding('DELIVERY_APPROVAL_ARTIFACT_MISMATCH', `Approval key ${artifactName} contains artifact ${approval.artifact}.`, artifact, `Move the approval to the ${approval.artifact} field or correct its artifact value.`));
+    }
+  }
+  if (delivery.state === 'DONE' && delivery.specs.some((spec) => spec.state !== 'DONE')) {
+    findings.push(finding('DELIVERY_DONE_WITH_INCOMPLETE_SPECS', 'Delivery is DONE while one or more Spec Packs are not DONE.', artifact, 'Complete all Spec Packs or restore the Delivery state.'));
+  }
+  if (delivery.type === 'APPLICATION_INIT' && delivery.design?.required === false) {
+    findings.push(finding('DELIVERY_DESIGN_INVALID', 'APPLICATION_INIT cannot declare that Technical Design is not required.', artifact, 'Remove the Design decision or mark Design as required.'));
+  }
+  return findings;
+}
+
+async function auditSpecDirectories(root: string, delivery: DeliveryMetadata): Promise<AuditFinding[]> {
+  const findings: AuditFinding[] = [];
+  const directory = join(root, 'sdd', 'deliveries', delivery.id, 'specs');
+  let entries: Array<{ isDirectory(): boolean; name: string }>;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return findings;
+    findings.push(finding('SPEC_DIRECTORY_INVALID', errorMessage(error), join('sdd', 'deliveries', delivery.id, 'specs'), 'Restore the Spec Pack directory structure.'));
+    return findings;
+  }
+  const declared = new Set<string>(delivery.specs.map((spec) => spec.id));
+  for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
+    if (!/^SP-[A-Za-z0-9][A-Za-z0-9_-]*$/.test(entry.name)) {
+      findings.push(finding('SPEC_DIRECTORY_INVALID', `Spec directory ${entry.name} has an invalid Spec Pack ID.`, join('sdd', 'deliveries', delivery.id, 'specs', entry.name), 'Rename or remove the invalid Spec Pack directory.'));
+    } else if (!declared.has(entry.name)) {
+      findings.push(finding('SPEC_DIRECTORY_UNREGISTERED', `Spec directory ${entry.name} is not declared in delivery.yaml.`, join('sdd', 'deliveries', delivery.id, 'specs', entry.name), 'Register the Spec Pack in delivery.yaml or remove the directory.'));
+    }
+  }
   return findings;
 }
 
@@ -274,6 +388,7 @@ async function evaluateActiveGate(
   const activeSpec = delivery.specs.find((spec) => spec.state !== 'DONE');
   if (activity === 'PLAN' && activeSpec) return evaluatePlanGate({ delivery, specId: activeSpec.id, artifacts });
   if (activity === 'CHECK' && activeSpec) return evaluateCheckGate({ delivery, specId: activeSpec.id, artifacts });
+  if (activity === 'CHECK') return evaluateDeliveryCheckGate({ delivery, artifacts });
   if (activity === 'DONE') return { ok: true };
   return {
     ok: false,
@@ -294,6 +409,8 @@ export async function auditDelivery(input: {
   const findings: AuditFinding[] = [];
   const events = new LocalEventRepository(input.root);
   const artifacts = new ArtifactStore(input.root);
+  findings.push(...auditMetadata(input.delivery));
+  findings.push(...await auditSpecDirectories(input.root, input.delivery));
 
   try {
     findings.push(...auditEvents(input.delivery, await events.read(input.delivery.id)));

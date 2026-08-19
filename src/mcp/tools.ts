@@ -19,7 +19,6 @@ export const newInputSchema = z.object({
   id: deliveryIdSchema,
   title: z.string().min(1),
   type: z.enum(['APPLICATION_INIT', 'FEATURE_CHANGE']),
-  design: z.object({ required: z.boolean(), reason: z.string().min(1) }).optional(),
 }).strict();
 export const submitInputSchema = z.object({
   root: rootSchema,

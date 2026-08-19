@@ -1,8 +1,8 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { requirementPath } from '../../src/artifacts/artifact-store.js';
+import { deliveryCheckPath, requirementPath } from '../../src/artifacts/artifact-store.js';
 import { createSddService } from '../../src/workflow/service.js';
 
 const roots: string[] = [];
@@ -63,6 +63,19 @@ describe('Team SDD workflow service', () => {
     await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ delivery: { state: 'REQUIREMENT' } });
   });
 
+  it('evaluates the Delivery Check Gate when CHECK has no active Spec Pack', async () => {
+    const root = await createRoot();
+    const service = createSddService({ root });
+    await service.createDelivery({ id: 'DLV-001', title: 'Student records', type: 'APPLICATION_INIT' });
+    const metadataPath = join(root, 'sdd/deliveries/DLV-001/delivery.yaml');
+    await writeFile(metadataPath, (await readFile(metadataPath, 'utf8')).replace('state: REQUIREMENT', 'state: CHECK'));
+    const checkPath = deliveryCheckPath(root, 'DLV-001');
+    await mkdir(join(checkPath, '..'), { recursive: true });
+    await writeFile(checkPath, '# Delivery Check\n\nRequirement Coverage: 100%\n\nIntegration PASS\nRegression PASS\nDelivery Acceptance PASS');
+
+    await expect(service.getNext({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ activity: 'CHECK', blockers: [] });
+  });
+
   it('advances an application Delivery only after the Requirement Gate passes', async () => {
     const root = await createRoot();
     const service = createSddService({ root });
@@ -104,4 +117,15 @@ describe('Team SDD workflow service', () => {
       expect.objectContaining({ type: 'design.decided', metadata: expect.objectContaining({ approvedBy: 'reviewer' }) }),
     ]));
   });
+
+  it('rejects duplicate Delivery creation without overwriting the original', async () => {
+    const root = await createRoot();
+    const service = createSddService({ root });
+    await service.createDelivery({ id: 'DLV-001', title: 'Original', type: 'APPLICATION_INIT' });
+
+    await expect(service.createDelivery({ id: 'DLV-001', title: 'Replacement', type: 'APPLICATION_INIT' })).rejects.toMatchObject({ code: 'DELIVERY_ALREADY_EXISTS' });
+    await expect(service.getStatus({ deliveryId: 'DLV-001' })).resolves.toMatchObject({ delivery: { title: 'Original' } });
+    await expect(service.events({ deliveryId: 'DLV-001' })).resolves.toHaveLength(1);
+  });
+
 });

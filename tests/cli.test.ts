@@ -45,7 +45,8 @@ describe('sdd CLI', () => {
   it('creates a Spec Pack and returns Gate findings through CLI submission', async () => {
     const root = await createRoot();
     const service = createSddService({ root });
-    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'FEATURE_CHANGE', design: { required: false, reason: 'Small change' } });
+    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'FEATURE_CHANGE' });
+    await service.decideDesign({ deliveryId: 'DLV-001', required: false, reason: 'Small change', approvedBy: 'reviewer' });
     const path = requirementPath(root, 'DLV-001');
     await mkdir(join(path, '..'), { recursive: true });
     await writeFile(path, '# Requirement\n\n## Source\n\nPRD\n\n## Scope\n\nRecords\n\n## Baseline\n\nApproved');
@@ -94,7 +95,7 @@ describe('sdd CLI', () => {
   it('shows active Plan task progress in status without changing workflow state', async () => {
     const root = await createRoot();
     const service = createSddService({ root });
-    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'FEATURE_CHANGE', design: { required: false, reason: 'Small' } });
+    await service.createDelivery({ id: 'DLV-001', title: 'Records', type: 'FEATURE_CHANGE' });
     const deliveryPath = join(root, 'sdd/deliveries/DLV-001/delivery.yaml');
     await mkdir(join(deliveryPath, '..', 'specs', 'SP-001'), { recursive: true });
     await writeFile(deliveryPath, 'id: DLV-001\ntitle: Records\ntype: FEATURE_CHANGE\nstate: EXECUTION\ndesign:\n  required: false\n  reason: Small\napprovals: {}\nspecs:\n  - id: SP-001\n    title: Records\n    state: CODE\n    dependencies: []\n    acceptanceCriteria: [AC-001]\n');

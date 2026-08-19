@@ -105,6 +105,21 @@ describe('read-only repository audit', () => {
     });
   });
 
+  it('reports an unknown event type instead of silently accepting it', async () => {
+    const root = await createRoot();
+    const service = await createDelivery(root);
+    await appendFile(join(root, '.sdd/events/DLV-001.jsonl'), `${JSON.stringify({
+      type: 'made.up',
+      deliveryId: 'DLV-001',
+      occurredAt: new Date().toISOString(),
+    })}\n`);
+
+    await expect(service.verifyRepository({ mode: 'hook' })).resolves.toMatchObject({
+      ok: false,
+      findings: expect.arrayContaining([expect.objectContaining({ code: 'EVENT_TYPE_UNKNOWN' })]),
+    });
+  });
+
   it('reports an event with a non-ISO timestamp', async () => {
     const root = await createRoot();
     const service = await createDelivery(root);
@@ -299,6 +314,64 @@ describe('read-only repository audit', () => {
         code: 'DELIVERY_METADATA_INVALID',
         message: expect.stringContaining('does not match requested Delivery ID'),
       })]),
+    });
+  });
+
+  it('reports inconsistent Spec dependencies and approval metadata', async () => {
+    const root = await createRoot();
+    const service = await createDelivery(root);
+    const deliveries = new LocalDeliveryRepository(root);
+    const delivery = await deliveries.read('DLV-001');
+    await deliveries.save({
+      ...delivery,
+      state: 'DONE',
+      approvals: {
+        requirement: {
+          artifact: 'design', hash: `sha256:${'0'.repeat(64)}`, actorType: 'human', approvedBy: 'reviewer', approvedAt: new Date().toISOString(),
+        },
+      },
+      specs: [
+        { id: 'SP-001', title: 'Records', state: 'READY', dependencies: ['SP-001', 'SP-999'], acceptanceCriteria: ['AC-001'] },
+        { id: 'SP-001', title: 'Duplicate', state: 'READY', dependencies: [], acceptanceCriteria: ['AC-002'] },
+      ],
+    });
+
+    await expect(service.verifyRepository({ mode: 'hook' })).resolves.toMatchObject({
+      ok: false,
+      findings: expect.arrayContaining([
+        expect.objectContaining({ code: 'DELIVERY_SPEC_ID_DUPLICATE' }),
+        expect.objectContaining({ code: 'DELIVERY_SPEC_SELF_DEPENDENCY' }),
+        expect.objectContaining({ code: 'DELIVERY_SPEC_DEPENDENCY_UNKNOWN' }),
+        expect.objectContaining({ code: 'DELIVERY_APPROVAL_ARTIFACT_MISMATCH' }),
+        expect.objectContaining({ code: 'DELIVERY_DONE_WITH_INCOMPLETE_SPECS' }),
+      ]),
+    });
+  });
+
+  it('reports an unregistered Spec directory on disk', async () => {
+    const root = await createRoot();
+    const service = await createDelivery(root);
+    await mkdir(join(root, 'sdd/deliveries/DLV-001/specs/SP-999'), { recursive: true });
+
+    await expect(service.verifyRepository({ mode: 'hook' })).resolves.toMatchObject({
+      ok: false,
+      findings: expect.arrayContaining([expect.objectContaining({ code: 'SPEC_DIRECTORY_UNREGISTERED' })]),
+    });
+  });
+
+  it('reports event fields that do not match the event type', async () => {
+    const root = await createRoot();
+    const service = await createDelivery(root);
+    await appendFile(join(root, '.sdd/events/DLV-001.jsonl'), `${JSON.stringify({
+      type: 'spec.created',
+      deliveryId: 'DLV-001',
+      occurredAt: new Date().toISOString(),
+      metadata: {},
+    })}\n`);
+
+    await expect(service.verifyRepository({ mode: 'hook' })).resolves.toMatchObject({
+      ok: false,
+      findings: expect.arrayContaining([expect.objectContaining({ code: 'EVENT_FIELDS_INVALID' })]),
     });
   });
 });
