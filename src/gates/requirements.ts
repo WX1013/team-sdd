@@ -30,6 +30,10 @@ function findingsFromSections(errors: string[], artifact: string, prefix: string
   ));
 }
 
+function hasHeading(markdown: string, aliases: readonly string[]): boolean {
+  return aliases.some((heading) => new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(markdown));
+}
+
 export async function evaluateRequirementGate(input: GateInput): Promise<GateResult> {
   const findings: GateFinding[] = [];
   let markdown = '';
@@ -40,14 +44,23 @@ export async function evaluateRequirementGate(input: GateInput): Promise<GateRes
   }
 
   if (markdown) {
-    for (const error of validateRequiredSections(markdown, ['Source', 'Scope', 'Baseline'])) {
-      if (error === 'Missing required section: Baseline') {
+    const requiredHeadings = [
+      { aliases: ['来源', 'Source'], label: 'Source' },
+      { aliases: ['范围', 'Scope'], label: 'Scope' },
+      { aliases: ['需求基线', 'Baseline'], label: 'Baseline' },
+    ] as const;
+    for (const { aliases, label } of requiredHeadings) {
+      if (hasHeading(markdown, aliases)) continue;
+      if (label === 'Baseline') {
         findings.push(finding('REQUIREMENT_BASELINE_MISSING', 'Requirement baseline is missing.', 'requirement.md', 'Add a final Baseline section.'));
       } else {
-        findings.push(...findingsFromSections([error], 'requirement.md', 'REQUIREMENT'));
+        findings.push(...findingsFromSections([`Missing required section: ${label}`], 'requirement.md', 'REQUIREMENT'));
       }
     }
-    if (/##\s+Questions[\s\S]*?Status:\s*unresolved/i.test(markdown)) {
+    for (const error of validateRequiredSections(markdown, [])) {
+      findings.push(...findingsFromSections([error], 'requirement.md', 'REQUIREMENT'));
+    }
+    if (/##\s+Questions[\s\S]*?Status:\s*unresolved/i.test(markdown) || /##\s+问题[\s\S]*?状态\s*[:：]\s*未解决/.test(markdown)) {
       findings.push(finding('REQUIREMENT_BLOCKING_QUESTION', 'Requirement has unresolved blocking questions.', 'requirement.md', 'Resolve all blocking questions.'));
     }
   }

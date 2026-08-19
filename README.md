@@ -6,21 +6,13 @@
 
 ## 1. 首次安装
 
-前提是 Node.js 20 或更高版本，以及能访问团队 Nexus。首次使用时，在个人 `~/.npmrc` 或 CI Secret 配置 Scope Registry；不要将 Token 或 `.npmrc` 提交到项目：
+需要 Node.js 20+，并能访问团队 Nexus。首次使用时，在个人 `~/.npmrc` 配置一次团队 Registry：
 
 ```ini
-@zbp:registry=https://nexus.zyzbp.cn/repository/npm-hosted/
+@zbp:registry=https://nexus.zyzbp.cn/repository/npm-group/
 ```
 
-在目标工程根目录选择正在使用的 Agent，执行对应的一条命令。无论项目原本是何种技术栈，显式 `--install` 都会将 Team SDD 安装为该项目的开发依赖，并创建 `.sdd/`、所选 Agent 的项目级命令，以及所需的 MCP 配置。
-
-`package.json` 不存在时，安装器只会创建下面这个最小私有清单，再安装 Team SDD；不会创建或修改 Maven、Gradle、Cargo、Poetry、pip、NuGet 等其他依赖文件。已有的普通 `package.json` 不会被覆盖。
-
-```json
-{
-  "private": true
-}
-```
+在目标工程根目录选择一个正在使用的 Agent，执行对应命令。无论工程是 Java、Go、Python、.NET 还是 Node，都可以安装；没有 `package.json` 时会自动创建最小私有清单。
 
 ### Claude Code
 
@@ -28,7 +20,7 @@
 npx @zbp/sdd init --agents claude --install
 ```
 
-重新加载当前项目后，使用 `/sdd:new`、`/sdd:next`、`/sdd:status`、`/sdd:approve`、`/sdd:doctor`。命令和 Skill 会写入 `.claude/`，项目根目录 `.mcp.json` 中会安全合并 `team-sdd` Server。
+重新打开项目后即可使用 `/sdd:new`、`/sdd:next` 等命令。
 
 ### CodeBuddy
 
@@ -36,7 +28,7 @@ npx @zbp/sdd init --agents claude --install
 npx @zbp/sdd init --agents codebuddy --install
 ```
 
-重新打开当前项目后，使用 `/sdd:new`、`/sdd:next`、`/sdd:status`、`/sdd:approve`、`/sdd:doctor`。命令和 Skill 会写入 `.codebuddy/`。若项目已有 `.mcp.json`，安装器保留全部已有 MCP Server，只合并 `team-sdd`，绝不覆盖原配置。
+重新打开项目后即可使用 `/sdd:new`、`/sdd:next` 等命令。
 
 ### Codex
 
@@ -44,79 +36,87 @@ npx @zbp/sdd init --agents codebuddy --install
 npx @zbp/sdd init --agents codex --install --register-codex
 ```
 
-`--register-codex` 会显式注册本项目的本地 Marketplace；完成后重新打开项目。在 Codex 使用 `/sdd-new`、`/sdd-next`、`/sdd-status`、`/sdd-approve`、`/sdd-doctor`。Codex 使用连字符命令，插件文件位于 `.agents/plugins/team-sdd/`。
+重新打开项目后即可使用 `/sdd-new`、`/sdd-next` 等命令。Codex 使用连字符形式。
 
-安装完成后，所有工程都可在根目录用 `npx sdd ...` 调用当前项目已安装的版本。后续增加或更新适配时运行：
+### 更新 Team SDD
+
+在项目根目录更新包，再同步当前使用的 Agent：
 
 ```bash
+npm install -D @zbp/sdd@latest
+
 npx sdd agents sync --agents claude
-npx sdd agents sync --agents codebuddy
-npx sdd agents sync --agents codex --register-codex
 ```
 
-同步只更新 Team SDD 记录且未被用户修改的文件；出现同名命令或 `team-sdd` MCP 冲突时会停止，而不会覆盖用户配置。
+将第二行替换为 `codebuddy`；Codex 则使用 `npx sdd agents sync --agents codex --register-codex`。完成后重新打开对应 Agent。
 
 ## 2. 完成第一个 Delivery
 
-下面用新应用 `DLV-001` 演示从开始到完成的完整过程。请按实际使用的入口执行；三种方式都调用同一个 Core，状态、审批和事件记录完全一致。Agent 负责按 `next` 返回的指引创建产物、调用受治理的 Core 提交；人只在需要审批时明确授权。
+下面以 `DLV-001` 演示。三种入口共享同一个 Core；无论使用哪个 Agent，状态、审批和事件记录都一致。Agent 负责产物与提交，人只在需要审批时授权。
 
 ### CodeBuddy 桌面程序
 
-在 CodeBuddy 桌面程序中打开项目，依次输入：
+安装并打开 CodeBuddy 桌面程序，选择 **Open Folder** 打开已安装 Team SDD 的项目。在聊天框依次输入：
 
 ```text
 /sdd:new DLV-001 "会员中心 V1" APPLICATION_INIT
 /sdd:next DLV-001
 ```
 
-根据 `next` 的结果让 Agent 完成当前产物。Requirement 完成后，由产品负责人明确授权并输入：
+根据 `/sdd:next` 的指引完成 Requirement。随后由产品负责人在同一聊天中授权：
 
 ```text
 /sdd:approve DLV-001 requirement "产品负责人"
 /sdd:next DLV-001
 ```
 
-`APPLICATION_INIT` 接着会要求完成并审批 Technical Design；随后创建和审批 Spec Pack。每完成一个阶段，都执行 `/sdd:next DLV-001` 获取唯一允许的下一步。实现、测试与 Check 由 Agent 按返回的 Provider、Skill 和检查项完成；随时可用 `/sdd:status DLV-001` 查看状态。
+继续按每次 `/sdd:next DLV-001` 的指引完成 Design、Spec Pack、Plan、Code 与 Check；随时用 `/sdd:status DLV-001` 查看进度。
 
 ### Codex 桌面程序
 
-在 Codex 桌面程序中打开项目，使用连字符形式：
+安装并打开 Codex 桌面程序，选择项目文件夹并重新加载项目。在聊天框使用连字符形式：
 
 ```text
 /sdd-new DLV-001 "会员中心 V1" APPLICATION_INIT
 /sdd-next DLV-001
 ```
 
-完成 Requirement 后，由产品负责人明确授权：
+完成 Requirement 后，由产品负责人在同一聊天中授权：
 
 ```text
 /sdd-approve DLV-001 requirement "产品负责人"
 /sdd-next DLV-001
 ```
 
-之后按照每次 `/sdd-next DLV-001` 的指引完成 Design、Spec Pack、Plan、Code 与 Check。用 `/sdd-status DLV-001` 查看进度。Codex 不使用冒号形式，这是它的命令语法限制。
+之后按 `/sdd-next DLV-001` 的指引完成余下阶段，用 `/sdd-status DLV-001` 查看进度。Codex 不使用冒号形式。
 
 ### Claude Code 命令行
 
-在项目根目录启动 Claude Code 后，在 Claude Code 的命令行中使用冒号形式：
+在终端进入项目根目录，启动 Claude Code：
+
+```bash
+claude
+```
+
+然后在 Claude Code 中使用冒号形式：
 
 ```text
 /sdd:new DLV-001 "会员中心 V1" APPLICATION_INIT
 /sdd:next DLV-001
 ```
 
-Requirement 完成后，由产品负责人明确授权：
+完成 Requirement 后，由产品负责人在同一会话中授权：
 
 ```text
 /sdd:approve DLV-001 requirement "产品负责人"
 /sdd:next DLV-001
 ```
 
-此后继续按 `/sdd:next DLV-001` 返回的步骤完成 Design、Spec Pack、Plan、Code 与 Check；用 `/sdd:status DLV-001` 查看进度。Claude Code 的命令运行在终端，但与桌面 Agent 使用相同的项目级 MCP 和治理边界。
+之后按 `/sdd:next DLV-001` 的指引完成余下阶段，用 `/sdd:status DLV-001` 查看进度。
 
-三个入口的共同节奏是：创建 Delivery → `next` 完成当前产物 → 人工 `approve`（Requirement、Design、Spec）→ 再次 `next`。最后 `/sdd:status` 显示 `DONE`。如果 `next` 返回阻塞项，先修复该项，不要手工修改 `delivery.yaml` 或事件文件。
+共同节奏：创建 Delivery → `next` 完成当前产物 → 人工 `approve`（Requirement、Design、Spec）→ 再次 `next`。最后 `/sdd:status` 显示 `DONE`。如果 `next` 返回阻塞项，先修复该项。
 
-`npx sdd` 是备用入口，适合没有 Agent、CI、脚本或排障；它不是上述团队日常协作的主入口。例如可运行 `npx sdd doctor`、`npx sdd status DLV-001` 和 `npx sdd verify DLV-001`。
+`npx sdd` 是备用入口，适合 CI、脚本或排障；日常协作优先使用对应 Agent 的短命令。
 
 ## 3. Team SDD 工作流、治理与自定义
 
@@ -137,16 +137,33 @@ Requirement → Technical Design（按类型/人工决定） → Spec Pack → P
 | Code | 项目代码与测试 | 按 `next` 给出的 Provider、Skill 和策略完成 | `next` |
 | Check | Spec/Delivery `check.md` | 测试、构建、静态检查、AC、审查与新鲜证据均通过 | `submit ... check` |
 
-### 审批、状态与事件
+### 命令参考
 
-Requirement、Design、Spec 的审批均绑定当前产物的 SHA-256 hash。审批后修改文件会自动使审批失效，必须重新审批。`delivery.yaml` 和 `.sdd/events/*.jsonl` 是 Engine 管理的事实记录；不要手工修改它们。需要诊断时使用：
+日常使用时优先在 Agent 中输入以下命令：
+
+| 动作 | Claude Code / CodeBuddy | Codex | 用途 |
+|---|---|---|---|
+| 创建 | `/sdd:new <id> "<标题>" <类型>` | `/sdd-new <id> "<标题>" <类型>` | 创建 Delivery。类型为 `APPLICATION_INIT` 或 `FEATURE_CHANGE`。 |
+| 下一步 | `/sdd:next <id>` | `/sdd-next <id>` | 获取当前唯一允许的工作与阻塞项。 |
+| 状态 | `/sdd:status <id>` | `/sdd-status <id>` | 查看 Workflow、Spec Packs、Current 与 Next。 |
+| 审批 | `/sdd:approve <id> <artifact> "<审批人>"` | `/sdd-approve <id> <artifact> "<审批人>"` | 审批 `requirement`、`design` 或 `spec`。 |
+| 诊断 | `/sdd:doctor` | `/sdd-doctor` | 检查项目、Agent 配置与 Git Hook。 |
+
+没有 Agent、在脚本中或需要排障时使用 CLI：
 
 ```bash
+npx sdd new DLV-001 --title "会员中心 V1" --type APPLICATION_INIT
 npx sdd status DLV-001
+npx sdd next DLV-001
 npx sdd inspect DLV-001
 npx sdd events DLV-001
 npx sdd verify DLV-001
+npx sdd doctor
 ```
+
+### 审批、状态与事件
+
+Requirement、Design、Spec 的审批均绑定当前产物的 SHA-256 hash。审批后修改文件会自动使审批失效，必须重新审批。`delivery.yaml` 和 `.sdd/events/*.jsonl` 是 Engine 管理的事实记录；不要手工修改它们。
 
 ### 执行策略
 

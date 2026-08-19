@@ -44,6 +44,30 @@ describe('Requirement and Design Gates', () => {
     ]);
   });
 
+  it('accepts Chinese Requirement headings', async () => {
+    const root = await createRoot();
+    const path = requirementPath(root, 'DLV-001');
+    await mkdir(join(path, '..'), { recursive: true });
+    await writeFile(path, '# 需求\n\n## 来源\n\nPRD\n\n## 范围\n\n- 编号：订单导出-2.3\n\n## 问题\n\n- 状态：已解决\n\n## 需求基线\n\n已确认');
+
+    await expect(evaluateRequirementGate({ delivery: application, artifacts: new ArtifactStore(root) })).resolves.toMatchObject({
+      ok: false,
+      findings: [expect.objectContaining({ code: 'REQUIREMENT_APPROVAL_MISSING' })],
+    });
+  });
+
+  it('blocks an unresolved Chinese question', async () => {
+    const root = await createRoot();
+    const path = requirementPath(root, 'DLV-001');
+    await mkdir(join(path, '..'), { recursive: true });
+    await writeFile(path, '# 需求\n\n## 来源\n\nPRD\n\n## 范围\n\n- 编号：订单导出-2.3\n\n## 问题\n\n- 状态：未解决\n\n## 需求基线\n\n待确认');
+
+    await expect(evaluateRequirementGate({ delivery: application, artifacts: new ArtifactStore(root) })).resolves.toMatchObject({
+      ok: false,
+      findings: expect.arrayContaining([expect.objectContaining({ code: 'REQUIREMENT_BLOCKING_QUESTION' })]),
+    });
+  });
+
   it('skips Design only for a feature change with an explicit false decision', async () => {
     const feature: DeliveryMetadata = {
       ...application,

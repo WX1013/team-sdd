@@ -1,42 +1,42 @@
 ---
 name: sdd-status
-description: Show the governed status of a Team SDD Delivery.
+description: 查看 Team SDD Delivery 的受治理状态。
 ---
 
 <!-- Team SDD managed: v1 -->
-# Team SDD status
+# Team SDD 状态
 
-Call `mcp__team-sdd__sdd_get_context` before `mcp__team-sdd__sdd_status` for the supplied Delivery. Treat both tool responses as internal structured data. Do not show raw MCP JSON, envelopes, or a separate Core-result summary.
+为用户提供的 Delivery 先调用 `mcp__team-sdd__sdd_get_context`，再调用 `mcp__team-sdd__sdd_status`。将两项工具响应仅作为内部结构化数据处理。面向用户的内容必须使用简体中文；不得展示原始 JSON、MCP 响应包络或 Core 结果原文。保留 Delivery/Spec ID、状态枚举和错误码。
 
-Return only the PRD Status UX below:
+只按以下 Status UX 向用户呈现：
 
 ```text
 <delivery.id> · <delivery.title>
 
-Workflow
+工作流
 ────────────────────
-Requirement   <✓|●|○>
-Design        <✓|●|○>
-Spec          <✓|●|○>
-Execution     <✓|●|○>
-Check         <✓|●|○>
-Done          <✓|●|○>
+需求        <✓|●|○>
+技术设计    <✓|●|○>
+规格        <✓|●|○>
+执行        <✓|●|○>
+检查        <✓|●|○>
+完成        <✓|●|○>
 
-Spec Packs
+规格包
 ────────────────────
-<one line per Spec Pack: id, title, state; or "No Spec Packs">
+<每个规格包一行：ID、标题、状态；或“暂无规格包”>
 
-Current
+当前
 ────────────────────
-<context.activity; when an unfinished Spec Pack is in PLAN, CODE, or CHECK, show "SP-… / Activity">
+<context.activity；当未完成规格包处于 PLAN、CODE 或 CHECK 时，显示“SP-… / 活动”>
 
-Plan
+计划
 ────────────────────
-<completed / total tasks, only when Core has supplied those counts>
+<已完成 / 总任务数；仅当 Core 提供任务统计时显示>
 
-Next
+下一步
 ────────────────────
 /sdd-next <delivery.id>
 ```
 
-Mark completed Workflow steps with `✓`, the Delivery state with `●`, and later steps with `○`. Omit the entire Plan section when Core has not supplied plan task counts. If `context.blockers` is nonempty, append `Blockers` with numbered items in Core order: `<message>` followed by `→ <nextStep>`. If it is empty, do not invent a blocker. Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.
+已完成的工作流步骤标记为 `✓`，Delivery 当前状态标记为 `●`，后续步骤标记为 `○`。Core 未提供任务统计时省略整个“计划”区块。若 `context.blockers` 非空，按 Core 顺序追加“阻塞项”，每项保留错误码，并将说明和 `→ <nextStep>` 译为中文；为空时不得虚构阻塞项。Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.

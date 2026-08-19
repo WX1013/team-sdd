@@ -42,7 +42,7 @@ describe('Agent Runtime', () => {
     });
 
     expect(context.prompt).toContain('## Artifact Template');
-    expect(context.prompt).toContain('## Understanding');
+    expect(context.prompt).toContain('## 需求理解');
     expect(context.prompt).toContain('sdd submit DLV-001 requirement');
   });
 

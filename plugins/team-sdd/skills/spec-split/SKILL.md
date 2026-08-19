@@ -1,33 +1,23 @@
 ---
 name: spec-split
-description: Use when a Team SDD Delivery needs an approved Requirement and Design divided into independently deliverable Spec Packs with scope, dependencies, and observable acceptance criteria.
+description: Use when a Team SDD Delivery needs an approved Requirement and Design divided into independently deliverable Spec Packs with scope, dependencies, observable acceptance criteria, and requirement traceability.
 ---
 
 # Team SDD Spec Split
 
-Divide an approved Requirement Baseline and Technical Design into small, governed vertical delivery units. A Spec Pack is useful only when it can be implemented, checked, and released with a clear outcome.
+将已批准的需求基线和技术设计拆分为可独立交付的纵向 Spec Pack。每个 Pack 必须有清晰结果，能被实现、检查与发布。
 
-## Workflow
+## 工作流
 
-1. Call `sdd_get_context` with the workspace's absolute `root`, `deliveryId`, and available capabilities. Confirm that the Requirement Baseline and Technical Design are available. Use only the active Spec Pack and artifact paths returned by Context.
-2. Identify user- or operator-visible outcomes. Prefer vertical slices that include the necessary API, data, behavior, and verification work; do not split merely by frontend, backend, or database layer.
-3. For each Pack, complete the Context template: `Goal`, `Requirement Sources`, `Scope`, `Out of Scope`, `Acceptance Criteria`, `Dependencies`, `Constraints`, and `Expected Impact`.
-4. Link each Pack to specific Requirement Baseline sections or `BR-<number>` rules. Give every acceptance criterion a stable `AC-<number>` identifier and phrase it as an observable outcome with a pass/fail boundary.
-5. List only real prerequisite Packs or external dependencies. Keep dependencies directional, minimize them, and revise the split when it creates a cycle. A Pack that cannot demonstrate value without another Pack is not independently deliverable and must be re-scoped or merged.
-6. State affected modules, APIs, data, permissions, migration needs, and tests in Expected Impact. Record technical, security, compatibility, and delivery limits in Constraints.
-7. Submit each completed Pack artifact through `sdd_submit_artifact`. Resolve returned Gate findings before re-submission. Never directly edit Delivery metadata or approve an artifact without explicit authorization.
+1. 使用工作区绝对路径、`deliveryId` 与可用能力调用 `sdd_get_context`。确认需求基线与技术设计可用，只使用 Context 返回的当前 Spec Pack 和产物路径。
+2. 识别面向用户或运营方的结果。优先包含必要 API、数据、行为和验证工作的纵向切片；不要仅按前端、后端或数据库层拆分。
+3. 对每个 Pack 完成 Context 模板：`Goal`、`Requirement Sources`、`Scope`、`Out of Scope`、`Acceptance Criteria`、`Dependencies`、`Constraints`、`Expected Impact`。
+4. 在 `Requirement Sources` 中，为每项覆盖需求逐字复制 `requirement.md` 的 `- 编号：<值>` 行。不得改变来源编号的拼写、格式或含义。
+5. 每项验收条件使用稳定的 `AC-<数字>` 标识，并表述为具有通过/失败边界的可观察结果。
+6. 仅列出真实前置 Pack 或外部依赖。保持依赖单向且最小；出现环路时修改拆分。无法独立证明价值的 Pack 应重划范围或合并。
+7. 在 Expected Impact 中说明受影响模块、API、数据、权限、迁移与测试；在 Constraints 中记录技术、安全、兼容性和交付限制。
+8. 通过 `sdd_submit_artifact` 分别提交每个完成的 Pack 产物。先解决 Gate findings 再重新提交；不得直接编辑 Delivery 元数据或未授权批准产物。
 
-## Split quality checks
+## 重新拆分的条件
 
-| Check | Pass condition |
-| --- | --- |
-| Outcome | Goal describes one meaningful capability, not an implementation layer. |
-| Traceability | Requirement Sources identify the Baseline decision that justifies the Pack. |
-| Scope | Included and excluded work create a clear handoff boundary. |
-| Acceptance | Every `AC-<number>` is observable, testable, and owned by this Pack. |
-| Dependencies | No circular dependency; prerequisite order is minimal and explicit. |
-| Impact | Implementers can find the affected contracts, data, code areas, and checks. |
-
-## Revise rather than force a split
-
-Stop and revise if the source requirement is still ambiguous, a Pack lacks a verifiable acceptance criterion, dependencies are circular, or a Pack consists only of hidden infrastructure with no separately useful boundary. Escalate unresolved product decisions to Requirement work and unresolved technical feasibility to Technical Design before submitting a misleading Spec.
+若来源需求仍模糊、Pack 缺少可验证验收条件、依赖成环，或 Pack 只是没有独立边界的隐藏基础设施，则应修改拆分。未解决的产品决定回到 Requirement，技术可行性问题回到 Technical Design。

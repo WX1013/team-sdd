@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { coverageFindingIds, requirementIds } from '../../src/gates/coverage.js';
 
 describe('Requirement coverage identifiers', () => {
-  it('collects stable REQ and BR identifiers and reports each uncovered source exactly once', () => {
-    expect(requirementIds('## Scope\n- REQ-001 Create record\n- REQ-002 List records\n## Business Rules\n- BR-001 Tenant isolation')).toEqual([
-      'REQ-001', 'REQ-002', 'BR-001',
-    ]);
-    expect(coverageFindingIds(['REQ-001', 'REQ-002', 'BR-001'], 'REQ-001 BR-001')).toEqual(['REQ-002']);
+  it('uses exact structured identifiers without assuming their format', () => {
+    const requirement = '## 范围\n\n- 编号：订单导出-2.3\n- 编号：ORD_EXPORT_A\n- 编号：订单导出-2.3';
+
+    expect(requirementIds(requirement)).toEqual(['订单导出-2.3', 'ORD_EXPORT_A']);
+    expect(coverageFindingIds(['订单导出-2.3', 'ORD_EXPORT_A'], '## Requirement Coverage\n\n- 编号：订单导出-2.3')).toEqual(['ORD_EXPORT_A']);
+    expect(requirementIds('- REQ-001\n- BR-001')).toEqual(['REQ-001', 'BR-001']);
   });
 });

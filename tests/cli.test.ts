@@ -124,7 +124,7 @@ describe('sdd CLI', () => {
     const result = await runCli(['template', 'requirement', 'DLV-001'], root);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('## Business Rules');
+    expect(result.stdout).toContain('## 业务规则');
     expect(result.stdout).not.toMatch(/\b(TBD|TODO)\b/i);
   });
 

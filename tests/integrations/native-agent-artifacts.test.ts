@@ -111,6 +111,11 @@ describe('Team SDD project Agent templates', () => {
     expect(readme).toContain('npx @zbp/sdd init --agents claude --install');
     expect(readme).toContain('/sdd:new');
     expect(readme).toContain('/sdd-new');
+    expect(readme).toContain('### 更新 Team SDD');
+    expect(readme).toContain('npm install -D @zbp/sdd@latest');
+    expect(readme).toContain('### CodeBuddy 桌面程序');
+    expect(readme).toContain('### Codex 桌面程序');
+    expect(readme).toContain('### 命令参考');
   });
 
   it('keeps maintenance instructions out of the user README', async () => {
