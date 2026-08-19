@@ -25,10 +25,10 @@ async function prepareBuiltSddDependency(root: string): Promise<void> {
   await mkdir(binaryDirectory, { recursive: true });
   await writeFile(binaryPath, [
     '#!/usr/bin/env node',
-    "import { spawnSync } from 'node:child_process';",
+    "const { spawnSync } = require('node:child_process');",
     `const result = spawnSync(process.execPath, [${JSON.stringify(cliPath)}, ...process.argv.slice(2)], { stdio: 'inherit' });`,
-    "if (result.error) throw result.error;",
-    "process.exitCode = result.status ?? 1;",
+    'if (result.error) throw result.error;',
+    'process.exitCode = result.status ?? 1;',
     '',
   ].join('\n'));
   await chmod(binaryPath, 0o755);
