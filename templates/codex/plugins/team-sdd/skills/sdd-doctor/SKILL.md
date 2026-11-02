@@ -1,10 +1,10 @@
 ---
 name: sdd-doctor
-description: 诊断 Team SDD 仓库前置条件。
+description: 诊断 Team SDD 仓库前置条件。用户要求 /sdd-doctor 或检查 Team SDD 安装是否可用时使用。
 ---
 
 <!-- Team SDD managed: v1 -->
-# Team SDD 诊断
+# Team SDD：诊断
 
 从项目根目录准确运行 `node node_modules/@zbp/sdd/dist/cli.js doctor --json`，且不得使用 `--fix`。将命令输出仅作为内部结构化数据处理。面向用户的内容必须使用简体中文；不得展示原始 JSON、MCP 响应包络或 Core 结果原文。保留错误码。
 
