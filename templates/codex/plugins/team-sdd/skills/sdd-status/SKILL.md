@@ -1,14 +1,14 @@
 ---
 name: sdd-status
-description: 查看 Team SDD Delivery 的受治理状态。
+description: 查看 Team SDD Delivery 的受治理状态。用户要求 /sdd-status 或询问某个 Delivery 进度时使用。
 ---
 
 <!-- Team SDD managed: v1 -->
-# Team SDD 状态
+# Team SDD：状态
 
-为用户提供的 Delivery 先调用 `mcp__team-sdd__sdd_get_context`，再调用 `mcp__team-sdd__sdd_status`。将两项工具响应仅作为内部结构化数据处理。面向用户的内容必须使用简体中文；不得展示原始 JSON、MCP 响应包络或 Core 结果原文。保留 Delivery/Spec ID、状态枚举和错误码。
+先以当前项目根目录和用户给出的 Delivery ID 调用 `mcp__team-sdd__sdd_get_context`，再调用 `mcp__team-sdd__sdd_status`。将两项工具响应仅作为内部结构化数据处理。面向用户的内容必须使用简体中文；不得展示原始 JSON、MCP 响应包络或 Core 结果原文。保留 Delivery/Spec ID、状态枚举和错误码。
 
-只按以下 Status UX 向用户呈现：
+只按以下形式呈现：
 
 ```text
 <delivery.id> · <delivery.title>
@@ -39,4 +39,4 @@ description: 查看 Team SDD Delivery 的受治理状态。
 /sdd-next <delivery.id>
 ```
 
-已完成的工作流步骤标记为 `✓`，Delivery 当前状态标记为 `●`，后续步骤标记为 `○`。Core 未提供任务统计时省略整个“计划”区块。若 `context.blockers` 非空，按 Core 顺序追加“阻塞项”，每项保留错误码，并将说明和 `→ <nextStep>` 译为中文；为空时不得虚构阻塞项。Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.
+已完成的工作流步骤标记为 `✓`，Delivery 当前状态标记为 `●`，后续步骤标记为 `○`。Core 未提供任务统计时省略整个“计划”区块。若 `context.blockers` 非空，按 Core 顺序追加“阻塞项”，每项保留错误码，并将说明和 `→ <nextStep>` 译为中文；为空时不得虚构阻塞项。Delivery 已为 `DONE` 时，下一步改为说明「无受治理待办；新需求请 /sdd-new」，不要暗示必须继续 `/sdd-next`。Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.

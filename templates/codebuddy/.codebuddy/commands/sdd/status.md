@@ -41,4 +41,4 @@ disable-model-invocation: true
 /sdd:next <delivery.id>
 ```
 
-已完成的工作流步骤标记为 `✓`，Delivery 当前状态标记为 `●`，后续步骤标记为 `○`。Core 未提供任务统计时省略整个“计划”区块。若 `context.blockers` 非空，按 Core 顺序追加“阻塞项”，每项保留错误码，并将说明和 `→ <nextStep>` 译为中文；为空时不得虚构阻塞项。Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.
+已完成的工作流步骤标记为 `✓`，Delivery 当前状态标记为 `●`，后续步骤标记为 `○`。Core 未提供任务统计时省略整个“计划”区块。若 `context.blockers` 非空，按 Core 顺序追加“阻塞项”，每项保留错误码，并将说明和 `→ <nextStep>` 译为中文；为空时不得虚构阻塞项。Delivery 已为 `DONE` 时，下一步改为说明「无受治理待办；新需求请 /sdd:new」，不要暗示必须继续 `/sdd:next`。Do not directly change `.sdd`, Delivery metadata, approvals, or Event Log files.
