@@ -25,7 +25,7 @@ describe('Nexus publish package', () => {
       bin: { sdd: 'dist/cli.js' },
       publishConfig: { registry: 'https://nexus.zyzbp.cn/repository/npm-hosted/' },
     });
-    expect(manifest.files).toEqual(['dist', 'templates', 'README.md']);
+    expect(manifest.files).toEqual(['dist', 'templates', 'plugins/team-sdd/skills/technical-design', 'README.md']);
   });
 
   it('provides a Node executable and excludes source and credentials from the tarball', async () => {
@@ -36,6 +36,8 @@ describe('Nexus publish package', () => {
     expect(paths).toEqual(expect.arrayContaining([
       'dist/cli.js',
       'dist/mcp-server.js',
+      'plugins/team-sdd/skills/technical-design/SKILL.md',
+      'templates/design/technical-design.md',
       'README.md',
       'package.json',
     ]));

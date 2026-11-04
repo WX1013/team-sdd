@@ -133,6 +133,18 @@ function outputFiles(templateRoot: string, agents: AgentSelection): ManagedFile[
   if (agents.includes('codex')) {
     files.push({ agent: 'codex', source: 'codex/plugins/team-sdd/.codex-plugin/plugin.json', destination: '.agents/plugins/team-sdd/.codex-plugin/plugin.json' });
     files.push({ agent: 'codex', source: 'codex/plugins/team-sdd/.mcp.json', destination: '.agents/plugins/team-sdd/.mcp.json' });
+    files.push(
+      {
+        agent: 'codex',
+        source: '../plugins/team-sdd/skills/technical-design/SKILL.md',
+        destination: '.agents/plugins/team-sdd/skills/technical-design/SKILL.md',
+      },
+      {
+        agent: 'codex',
+        source: 'design/technical-design.md',
+        destination: '.agents/plugins/team-sdd/skills/technical-design/references/technical-design.md',
+      },
+    );
     for (const action of actions) files.push({ agent: 'codex', source: `codex/plugins/team-sdd/skills/sdd-${action}/SKILL.md`, destination: `.agents/plugins/team-sdd/skills/sdd-${action}/SKILL.md` });
   }
   return files.map((file) => ({ ...file, source: join(templateRoot, file.source) }));

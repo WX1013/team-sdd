@@ -75,6 +75,9 @@ describe('project Agent installer', () => {
     const marketplace = JSON.parse(await readFile(join(root, '.agents/plugins/marketplace.json'), 'utf8'));
 
     expect(result.installed).toContain('.agents/plugins/team-sdd/.codex-plugin/plugin.json');
+    const designSkill = '.agents/plugins/team-sdd/skills/technical-design';
+    expect(await readFile(join(root, designSkill, 'SKILL.md'), 'utf8')).toContain('references/technical-design.md');
+    expect(await readFile(join(root, designSkill, 'references/technical-design.md'), 'utf8')).toContain('模块功能设计');
     expect(marketplace.plugins).toEqual(expect.arrayContaining([
       expect.objectContaining({
         name: 'team-sdd',
