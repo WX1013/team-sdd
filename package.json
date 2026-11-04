@@ -1,7 +1,7 @@
 {
   "name": "@zbp/sdd",
   "private": false,
-  "version": "0.1.2",
+  "version": "0.1.4",
   "license": "UNLICENSED",
   "type": "module",
   "bin": {
@@ -13,6 +13,7 @@
   "files": [
     "dist",
     "templates",
+    "plugins/team-sdd/skills/technical-design",
     "README.md"
   ],
   "publishConfig": {
